@@ -53,22 +53,21 @@ class TrainingGUI:
                   style="Header.TLabel").pack(pady=10)
         
         # Фрейм для параметров
-        self.params_frame = ttk.LabelFrame(self.main_frame, text="Параметры обучения")
+        self.params_frame = ttk.LabelFrame(self.main_frame, text="Параметры запуска этапов")
         self.params_frame.pack(fill=tk.X, padx=5, pady=5)
         
-        # Режим запуска
-        ttk.Label(self.params_frame, text="Режим запуска:").grid(row=0, column=0, sticky=tk.W, padx=5, pady=5)
-        
-        self.mode = tk.IntVar(value=1)
-        modes = [
-            ("Полный пайплайн (предобработка, создание признаков, обучение)", 1),
-            ("Только обучение моделей (без предобработки)", 2),
-            ("Обучение с оптимизацией и ансамблированием", 3)
-        ]
-        
-        for i, (text, value) in enumerate(modes):
-            ttk.Radiobutton(self.params_frame, text=text, variable=self.mode, value=value).grid(
-                row=i+1, column=0, sticky=tk.W, padx=20, pady=2)
+        # Новые чекбоксы для управления пропусками этапов
+        self.skip_preprocessing_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(self.params_frame, text="Пропустить предобработку данных", 
+                         variable=self.skip_preprocessing_var).grid(row=0, column=0, sticky=tk.W, padx=5, pady=2)
+
+        self.skip_loyalty_features_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(self.params_frame, text="Пропустить создание признаков лояльности", 
+                         variable=self.skip_loyalty_features_var).grid(row=1, column=0, sticky=tk.W, padx=5, pady=2)
+
+        self.skip_model_training_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(self.params_frame, text="Пропустить обучение (использовать сохраненные модели)", 
+                         variable=self.skip_model_training_var).grid(row=2, column=0, sticky=tk.W, padx=5, pady=2)
         
         # Фрейм для дополнительных опций
         self.options_frame = ttk.LabelFrame(self.main_frame, text="Дополнительные опции")
@@ -82,6 +81,14 @@ class TrainingGUI:
         self.balance_classes = tk.BooleanVar(value=False)
         ttk.Checkbutton(self.options_frame, text="Балансировка классов", 
                          variable=self.balance_classes).grid(row=1, column=0, sticky=tk.W, padx=5, pady=5)
+        
+        self.tune_hyperparams_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(self.options_frame, text="Настроить гиперпараметры",
+                        variable=self.tune_hyperparams_var).grid(row=0, column=1, sticky=tk.W, padx=5, pady=5)
+
+        self.create_ensemble_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(self.options_frame, text="Создать ансамблевые модели",
+                        variable=self.create_ensemble_var).grid(row=1, column=1, sticky=tk.W, padx=5, pady=5)
         
         # Путь к датасету
         self.dataset_frame = ttk.Frame(self.main_frame)
@@ -197,21 +204,27 @@ class TrainingGUI:
                "--output_dir", self.output_path.get()]
         
         # Добавление опций в зависимости от выбранного режима
-        if self.mode.get() == 2:
+        if self.skip_preprocessing_var.get():
             cmd.append("--skip_preprocessing")
-            cmd.append("--skip_loyalty_features")
-        elif self.mode.get() == 3:
-            cmd.append("--skip_preprocessing")
-            cmd.append("--skip_loyalty_features")
-            cmd.append("--tune_hyperparams")
-            cmd.append("--create_ensemble")
         
+        if self.skip_loyalty_features_var.get():
+            cmd.append("--skip_loyalty_features")
+
+        if self.skip_model_training_var.get():
+            cmd.append("--skip_model_training")
+
         # Дополнительные опции
         if self.save_intermediate.get():
             cmd.append("--save_intermediate")
         
         if self.balance_classes.get():
             cmd.append("--balance_classes")
+
+        if self.tune_hyperparams_var.get():
+            cmd.append("--tune_hyperparams")
+
+        if self.create_ensemble_var.get():
+            cmd.append("--create_ensemble")
         
         # Вывод информации о запуске
         self.log_text.config(state=tk.NORMAL)

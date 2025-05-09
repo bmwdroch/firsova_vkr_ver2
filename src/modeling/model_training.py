@@ -76,7 +76,10 @@ class ModelTrainer:
         self.models['lightgbm'] = LGBMClassifier(
             n_estimators=100,
             class_weight=class_weights,
-            random_state=42
+            min_child_samples=20,
+            min_split_gain=0.1,
+            random_state=42,
+            verbosity=-1
         )
         
         self.models['svm'] = SVC(

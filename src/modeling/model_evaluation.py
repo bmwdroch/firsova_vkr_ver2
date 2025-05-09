@@ -287,12 +287,14 @@ class ModelEvaluator:
         
         return plt.gcf()
     
-    def plot_feature_importance(self, X, feature_names=None, top_n=20, figsize=(14, 10)):
+    def plot_feature_importance(self, model, model_name, X, feature_names=None, top_n=20, figsize=(10, 8)):
         """
-        Строит графики важности признаков для всех поддерживаемых моделей.
+        Строит графики важности признаков для указанной модели.
         
         Args:
-            X: Данные.
+            model: Обученная модель.
+            model_name (str): Имя модели.
+            X: Данные (может быть DataFrame или NumPy array).
             feature_names (list): Имена признаков.
             top_n (int): Количество наиболее важных признаков для отображения.
             figsize (tuple): Размер фигуры.
@@ -303,105 +305,112 @@ class ModelEvaluator:
         if feature_names is None:
             if isinstance(X, pd.DataFrame):
                 feature_names = X.columns.tolist()
-            else:
+            elif hasattr(X, 'shape'): # Check if X has shape attribute (like numpy array)
                 feature_names = [f'feature_{i}' for i in range(X.shape[1])]
+            else:
+                # Fallback if X is not a DataFrame and has no shape (should not happen with typical data)
+                print("Warning: Could not determine feature names.")
+                feature_names = []
         
-        # Определение моделей, поддерживающих важность признаков
-        models_with_importance = []
-        for name, model in self.models.items():
-            if hasattr(model, 'feature_importances_') or hasattr(model, 'coef_'):
-                models_with_importance.append(name)
+        importance = None
+        if hasattr(model, 'feature_importances_'):
+            importance = model.feature_importances_
+        elif hasattr(model, 'coef_'): # For linear models
+            if model.coef_.ndim > 1: # For multi-class linear models
+                importance = np.abs(model.coef_).mean(axis=0)
+            else: # For binary linear models or single output regression
+                importance = np.abs(model.coef_)
         
-        n_models = len(models_with_importance)
-        
-        if n_models == 0:
-            print("Ни одна модель не поддерживает оценку важности признаков")
+        if importance is None:
+            print(f"Не удалось извлечь важность признаков для модели {model_name}.")
             return None
+
+        if not feature_names or len(feature_names) != len(importance):
+            print(f"Ошибка: Количество имен признаков ({len(feature_names) if feature_names else 0}) не совпадает с количеством значений важности ({len(importance)}) для модели {model_name}.")
+            # Attempt to create generic feature names if mismatched and X has shape
+            if hasattr(X, 'shape') and X.shape[1] == len(importance):
+                 print(f"Используются генерируемые имена признаков.")
+                 feature_names = [f'feature_{i}' for i in range(len(importance))]
+            else:
+                return None # Cannot proceed if names and importances don't match
+
+        features_df = pd.DataFrame({
+            'feature': feature_names,
+            'importance': importance
+        })
+        features_df = features_df.sort_values('importance', ascending=False).head(top_n)
         
-        n_cols = min(2, n_models)
-        n_rows = (n_models + n_cols - 1) // n_cols
+        fig, ax = plt.subplots(figsize=figsize) # Create figure and axis for the single plot
         
-        fig, axes = plt.subplots(n_rows, n_cols, figsize=figsize)
-        
-        if n_models == 1:
-            axes = np.array([axes])
-        
-        axes = axes.flatten()
-        
-        for i, name in enumerate(models_with_importance):
-            model = self.models[name]
-            
-            # Получение важности признаков
-            importance = None
-            
-            if hasattr(model, 'feature_importances_'):
-                importance = model.feature_importances_
-            elif hasattr(model, 'coef_'):
-                importance = np.abs(model.coef_).mean(axis=0) if model.coef_.ndim > 1 else np.abs(model.coef_)
-            
-            # Создание DataFrame и сортировка
-            features_df = pd.DataFrame({
-                'feature': feature_names,
-                'importance': importance
-            })
-            features_df = features_df.sort_values('importance', ascending=False).head(top_n)
-            
-            # Визуализация
-            sns.barplot(x='importance', y='feature', data=features_df, ax=axes[i])
-            axes[i].set_title(f'Важность признаков: {name}')
-            axes[i].set_xlabel('Важность')
-            axes[i].set_ylabel('Признак')
-        
-        # Скрываем неиспользуемые субграфики
-        for i in range(n_models, len(axes)):
-            axes[i].axis('off')
-        
+        sns.barplot(x='importance', y='feature', data=features_df, ax=ax, palette="viridis")
+        ax.set_title(f'Важность признаков: {model_name}', fontsize=16)
+        ax.set_xlabel('Важность', fontsize=14)
+        ax.set_ylabel('Признак', fontsize=14)
+        ax.tick_params(axis='both', which='major', labelsize=12)
         plt.tight_layout()
         
         # Сохранение
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        filename = os.path.join(self.results_dir, 'plots', f'feature_importance_{timestamp}.png')
-        plt.savefig(filename, dpi=300, bbox_inches='tight')
+        plot_dir = os.path.join(self.results_dir, 'plots')
+        os.makedirs(plot_dir, exist_ok=True) # Ensure directory exists
+        filename = os.path.join(plot_dir, f'feature_importance_{model_name}_{timestamp}.png')
+        try:
+            plt.savefig(filename, dpi=300, bbox_inches='tight')
+            print(f"График важности признаков для {model_name} сохранен в {filename}")
+        except Exception as e:
+            print(f"Ошибка при сохранении графика важности признаков для {model_name}: {e}")
         
         return fig
     
-    def plot_metrics_comparison(self, metrics=None, figsize=(14, 8)):
+    def plot_metrics_comparison(self, metrics_dict=None, figsize=(14, 8)):
         """
-        Строит сравнительную диаграмму метрик для всех моделей.
+        Строит сравнительный график метрик для всех моделей.
         
         Args:
-            metrics (list): Список метрик для сравнения.
+            metrics_dict (dict): Словарь с метриками для построения графика. 
+                                 Если None, используются сохраненные результаты.
             figsize (tuple): Размер фигуры.
             
         Returns:
             matplotlib.figure.Figure: Объект фигуры.
         """
-        if metrics is None:
-            metrics = ['accuracy', 'precision_macro', 'recall_macro', 'f1_macro']
-        
-        # Создание DataFrame для сравнения
-        comparison_data = []
-        for name, results in self.evaluation_results.items():
-            row = {'model': name}
-            for metric in metrics:
-                if metric in results:
-                    row[metric] = results[metric]
-            comparison_data.append(row)
-        
-        if not comparison_data:
-            print("Нет данных для сравнения")
+        if metrics_dict is None:
+            metrics_dict = self.evaluation_results
+
+        # Выбираем только числовые метрики для сравнения
+        # Основные метрики: accuracy, precision_macro, recall_macro, f1_macro
+        plot_data = {}
+        for model_name, model_metrics in metrics_dict.items():
+            plot_data[model_name] = {
+                'Accuracy': model_metrics.get('accuracy'),
+                'Precision (macro)': model_metrics.get('precision_macro'),
+                'Recall (macro)': model_metrics.get('recall_macro'),
+                'F1-score (macro)': model_metrics.get('f1_macro')
+            }
+
+        # Удаляем модели, для которых нет числовых метрик (на всякий случай)
+        plot_data = {k: v for k, v in plot_data.items() if all(val is not None for val in v.values())}
+
+        if not plot_data:
+            print("Нет данных для построения графика сравнения метрик.")
             return None
+
+        comparison_df = pd.DataFrame.from_dict(plot_data, orient='index')
         
-        comparison_df = pd.DataFrame(comparison_data)
-        
-        # Визуализация
+        if comparison_df.empty:
+            print("DataFrame для сравнения метрик пуст.")
+            return None
+
         fig, ax = plt.subplots(figsize=figsize)
-        comparison_df.set_index('model').plot(kind='bar', ax=ax)
-        plt.title('Сравнение метрик качества моделей')
-        plt.ylabel('Значение метрики')
-        plt.xticks(rotation=45)
-        plt.grid(axis='y', linestyle='--', alpha=0.7)
-        plt.legend(title='Метрика')
+        comparison_df.plot(kind='bar', ax=ax) # модели уже являются индексами
+        
+        ax.set_title('Сравнение метрик моделей')
+        ax.set_ylabel('Значение метрики')
+        ax.set_xlabel('Модель')
+        plt.xticks(rotation=45, ha="right")
+        plt.legend(title='Метрики')
+        plt.grid(axis='y', linestyle='--')
+        plt.tight_layout()
         
         # Сохранение
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -410,11 +419,12 @@ class ModelEvaluator:
         
         return fig
     
-    def plot_class_distribution(self, y_true, y_pred_dict=None, figsize=(14, 8)):
+    def plot_class_distribution(self, X_test, y_true, y_pred_dict=None, figsize=(14, 8)):
         """
         Строит распределение классов для истинных и предсказанных значений.
         
         Args:
+            X_test: Тестовые данные (необходимы, если y_pred_dict не предоставлен).
             y_true: Истинные значения.
             y_pred_dict (dict): Словарь с предсказаниями разных моделей.
             figsize (tuple): Размер фигуры.

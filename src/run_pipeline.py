@@ -13,6 +13,7 @@ import pandas as pd
 import pickle
 from datetime import datetime
 import warnings
+import numpy as np
 
 # Подавление предупреждений
 warnings.filterwarnings('ignore')
@@ -59,6 +60,8 @@ def parse_args():
                        help='Применить балансировку классов при обучении моделей')
     parser.add_argument('--save_intermediate', action='store_true',
                        help='Сохранять промежуточные результаты')
+    parser.add_argument('--skip_model_training', action='store_true',
+                       help='Пропустить этап обучения моделей (использовать сохраненные)')
     
     return parser.parse_args()
 
@@ -163,7 +166,7 @@ def create_loyalty_features_step(base_df, output_dir, save_intermediate=False):
 
 
 def train_models_step(data_dict, output_dir, tune_hyperparams=False, create_ensemble=False,
-                     balance_classes=False, random_state=42):
+                     balance_classes=False, random_state=42, skip_model_training=False, save_intermediate=False):
     """
     Выполнение шага обучения моделей.
     
@@ -174,6 +177,8 @@ def train_models_step(data_dict, output_dir, tune_hyperparams=False, create_ense
         create_ensemble (bool): Создавать ли ансамблевые модели.
         balance_classes (bool): Применять ли балансировку классов.
         random_state (int): Seed для генератора случайных чисел.
+        skip_model_training (bool): Пропускать ли обучение моделей.
+        save_intermediate (bool): Сохранять ли промежуточные модели и метрики.
         
     Returns:
         tuple: (ModelTrainer, ModelEvaluator) - объекты для обучения и оценки моделей.
@@ -185,93 +190,117 @@ def train_models_step(data_dict, output_dir, tune_hyperparams=False, create_ense
     results_dir = os.path.join(output_dir, 'results')
     os.makedirs(models_dir, exist_ok=True)
     os.makedirs(results_dir, exist_ok=True)
+
+    trained_models_path = os.path.join(models_dir, 'trained_models_bundle.pkl')
     
     # Извлечение данных из словаря
     X_train = data_dict['X_train']
     X_test = data_dict['X_test']
     y_train = data_dict['y_train']
     y_test = data_dict['y_test']
-    feature_names = data_dict.get('feature_names')
-    class_names = data_dict.get('class_names')
-    
+    feature_names = data_dict.get('features', [])
+    class_names = data_dict.get('class_names', [])
+
+    # Преобразование в numpy array
+    X_train = X_train.to_numpy() if hasattr(X_train, 'to_numpy') else np.array(X_train)
+    X_test = X_test.to_numpy() if hasattr(X_test, 'to_numpy') else np.array(X_test)
+    y_train = y_train.to_numpy() if hasattr(y_train, 'to_numpy') else np.array(y_train)
+    y_test = y_test.to_numpy() if hasattr(y_test, 'to_numpy') else np.array(y_test)
+
     print(f"Размер обучающей выборки: {X_train.shape}")
     print(f"Размер тестовой выборки: {X_test.shape}")
     print(f"Количество признаков: {X_train.shape[1]}")
+    
+    # Создаем маппинг числовых меток на имена классов
+    class_mapping = {i: name for i, name in enumerate(class_names)} if class_names else {i: str(i) for i in range(len(np.unique(y_train)))}
+    
     print(f"Распределение классов (обучающая выборка):")
-    for class_idx, class_name in enumerate(class_names):
-        count = (y_train == class_idx).sum()
+    unique_classes = np.unique(y_train)
+    for class_idx in sorted(unique_classes):
+        count = np.sum(y_train == class_idx)
+        class_name = class_mapping.get(class_idx, f"Класс {class_idx}")
         print(f"  - {class_name}: {count} ({count/len(y_train):.2%})")
     
     # Создание объекта для обучения моделей
     trainer = ModelTrainer(models_dir=models_dir, results_dir=results_dir)
-    
-    # Определение весов классов для учета несбалансированности
-    if balance_classes:
-        print("Применение весов классов для учета несбалансированности...")
-        class_counts = pd.Series(y_train).value_counts()
-        class_weights = {idx: len(y_train) / (len(class_names) * count) 
-                         for idx, count in class_counts.items()}
+    evaluator = ModelEvaluator(trainer.models, results_dir=results_dir) # Инициализируем здесь
+    all_metrics = {}
+
+    if skip_model_training and os.path.exists(trained_models_path):
+        print(f"Загрузка ранее обученных моделей и метрик из {trained_models_path}...")
+        with open(trained_models_path, 'rb') as f:
+            saved_bundle = pickle.load(f)
+            trainer.models = saved_bundle['models']
+            all_metrics = saved_bundle['metrics']
+            # Обновляем evaluator новым словарем моделей
+            evaluator.models = trainer.models 
+        print("Модели и метрики загружены.")
     else:
-        class_weights = None
-    
-    # Добавление базовых моделей
-    print("Добавление базовых моделей...")
-    trainer.add_base_models(class_weights=class_weights, random_state=random_state)
-    
-    # Обучение всех моделей
-    print("Обучение моделей...")
-    trainer.train_all_models(X_train, y_train)
-    
-    # Настройка гиперпараметров (если требуется)
-    if tune_hyperparams:
-        print("Настройка гиперпараметров...")
+        if skip_model_training:
+            print(f"Файл {trained_models_path} не найден. Модели будут обучены заново.")
+
+        # Определение весов классов для учета несбалансированности
+        if balance_classes:
+            print("Применение весов классов для учета несбалансированности...")
+            class_counts = np.bincount(y_train)
+            class_weights = {i: len(y_train) / (len(unique_classes) * count) 
+                             for i, count in enumerate(class_counts)}
+        else:
+            class_weights = None
         
-        # Получение оптимизатора для каждой модели
-        best_models = trainer.tune_all_models(
-            X_train, y_train, 
-            cv=5, 
-            method='random', 
-            n_iter=20
+        # Добавление базовых моделей
+        print("Добавление базовых моделей...")
+        trainer.add_base_models(class_weights=class_weights)
+        
+        # Обучение всех моделей
+        print("Обучение моделей...")
+        trainer.train_all_models(X_train, y_train)
+        
+        # Настройка гиперпараметров (если требуется)
+        if tune_hyperparams:
+            print("Настройка гиперпараметров...")
+            best_models = trainer.tune_all_models(
+                X_train, y_train, 
+                cv=5, 
+                method='random', 
+                n_iter=20
+            )
+            for name, model in best_models.items():
+                trainer.models[name] = model
+        
+        # Создание ансамблевых моделей (если требуется)
+        if create_ensemble:
+            print("Создание ансамблевых моделей...")
+            models_for_ensemble = [(name, model) for name, model in trainer.models.items() 
+                                  if name not in ['voting_ensemble', 'stacking_ensemble']]
+            
+            if len(models_for_ensemble) > 1:
+                print("Создание ансамбля голосования...")
+                trainer.create_voting_ensemble(estimators=models_for_ensemble, voting='soft')
+                trainer.train_model('voting_ensemble', X_train, y_train)
+                
+                print("Создание стекинг-ансамбля...")
+                trainer.create_stacking_ensemble(estimators=models_for_ensemble)
+                trainer.train_model('stacking_ensemble', X_train, y_train)
+        
+        # Оценка всех моделей на тестовой выборке
+        print("Оценка моделей на тестовой выборке...")
+        all_metrics = evaluator.evaluate_models(
+            X_test, y_test, class_names=class_names
         )
-        
-        # Обновление моделей оптимизированными версиями
-        for name, model in best_models.items():
-            trainer.models[name] = model
-            print(f"Модель {name} обновлена с оптимальными гиперпараметрами")
-    
-    # Создание ансамблевых моделей (если требуется)
-    if create_ensemble:
-        print("Создание ансамблевых моделей...")
-        
-        # Отбор лучших моделей для ансамбля
-        models_for_ensemble = []
-        for name, model in trainer.models.items():
-            if name not in ['voting_ensemble', 'stacking_ensemble']:
-                models_for_ensemble.append((name, model))
-        
-        # Создание ансамбля голосования
-        print("Создание ансамбля голосования...")
-        trainer.create_voting_ensemble(estimators=models_for_ensemble, voting='soft')
-        
-        # Создание стекинг-ансамбля
-        print("Создание стекинг-ансамбля...")
-        trainer.create_stacking_ensemble(estimators=models_for_ensemble)
-    
-    # Оценка моделей
-    print("\n--- Шаг 4: Оценка моделей ---")
-    evaluator = ModelEvaluator(results_dir=results_dir)
-    
-    # Оценка всех моделей на тестовой выборке
-    print("Оценка моделей на тестовой выборке...")
-    all_metrics = evaluator.evaluate_all_models(
-        trainer.models, X_test, y_test, 
-        feature_names=feature_names, 
-        class_names=class_names
-    )
+
+        if save_intermediate:
+            print(f"Сохранение обученных моделей и метрик в {trained_models_path}...")
+            with open(trained_models_path, 'wb') as f:
+                pickle.dump({'models': trainer.models, 'metrics': all_metrics}, f)
+            print("Модели и метрики сохранены.")
+
+    # Передаем all_metrics в ModelEvaluator, если они были загружены или вычислены
+    evaluator.evaluation_results = all_metrics
     
     # Создание сравнительных визуализаций
     print("Создание сравнительных визуализаций...")
-    evaluator.plot_models_comparison(all_metrics)
+    evaluator.plot_metrics_comparison(all_metrics)
     
     # Визуализация важности признаков для интерпретируемых моделей
     print("Визуализация важности признаков...")
@@ -279,26 +308,41 @@ def train_models_step(data_dict, output_dir, tune_hyperparams=False, create_ense
         if model_name in trainer.models:
             try:
                 evaluator.plot_feature_importance(
-                    trainer.models[model_name], model_name, 
-                    X_train, feature_names, 
-                    n_top=20
+                    trainer.models[model_name], model_name,
+                    X_train, feature_names,
+                    top_n=20
                 )
             except Exception as e:
                 print(f"Ошибка при визуализации важности признаков для {model_name}: {e}")
     
     # Сохранение лучшей модели
-    best_model_name = max(all_metrics, key=lambda x: all_metrics[x]['f1_weighted'])
+    best_model_name = max(all_metrics, key=lambda x: all_metrics[x].get('f1_macro', 0.0))
     best_model = trainer.models[best_model_name]
     
-    print(f"\nЛучшая модель по F1-weighted: {best_model_name}")
+    print(f"\nЛучшая модель по F1-macro: {best_model_name}")
     print(f"Метрики лучшей модели:")
-    for metric, value in all_metrics[best_model_name].items():
-        print(f"  - {metric}: {value:.4f}")
+    if best_model_name in all_metrics:
+        for metric, value in all_metrics[best_model_name].items():
+            if isinstance(value, (int, float)):
+                print(f"  - {metric}: {value:.4f}")
+            elif isinstance(value, dict):
+                print(f"  - {metric}: (dict with keys: {', '.join(value.keys())})")
+            elif isinstance(value, list):
+                print(f"  - {metric}: (list of length {len(value)})")
+            else:
+                print(f"  - {metric}: {value}")
+    else:
+        print(f"  Метрики для модели {best_model_name} не найдены.")
     
     # Сохранение лучшей модели в отдельный файл
     best_model_path = os.path.join(models_dir, 'best_model.pkl')
     with open(best_model_path, 'wb') as f:
-        pickle.dump({'model': best_model, 'name': best_model_name}, f)
+        pickle.dump({
+            'model': best_model, 
+            'name': best_model_name,
+            'class_mapping': class_mapping,
+            'feature_names': feature_names
+        }, f)
     print(f"Лучшая модель сохранена в {best_model_path}")
     
     return trainer, evaluator
@@ -335,7 +379,7 @@ def main():
                 base_df = pickle.load(f)
             print(f"Загружен существующий базовый датасет из {base_file}")
         else:
-            print(f"Базовый датасет не найден в {base_file}")
+            print(f"Ошибка: Базовый датасет не найден в {base_file}")
             return
     
     # Шаг 2: Создание признаков лояльности
@@ -349,7 +393,7 @@ def main():
         except Exception as e:
             print(f"Ошибка при создании признаков лояльности: {e}")
             import traceback
-            traceback.print_exc()  # Добавляем полный стек-трейс ошибки
+            traceback.print_exc()
             return
     else:
         print("\n--- Шаг 2: Создание признаков лояльности пропущено ---")
@@ -360,7 +404,7 @@ def main():
                 data_dict = pickle.load(f)
             print(f"Загружен существующий датасет для моделирования из {dataset_file}")
         else:
-            print(f"Датасет для моделирования не найден в {dataset_file}")
+            print(f"Ошибка: Датасет для моделирования не найден в {dataset_file}")
             return
     
     # Шаг 3 и 4: Обучение и оценка моделей
@@ -371,7 +415,9 @@ def main():
             tune_hyperparams=args.tune_hyperparams,
             create_ensemble=args.create_ensemble,
             balance_classes=args.balance_classes,
-            random_state=args.random_state
+            random_state=args.random_state,
+            skip_model_training=args.skip_model_training,
+            save_intermediate=args.save_intermediate
         )
     except Exception as e:
         print(f"Ошибка при обучении моделей: {e}")
