@@ -1,0 +1,75 @@
+# Model configuration
+
+# Data preprocessing
+preprocessing:
+  missing_values:
+    strategy: median
+    group_by: ['store_id', 'product_category']
+  outliers:
+    method: iqr
+    threshold: 1.5
+  scaling:
+    numerical:
+      method: standard
+      exclude: ['customer_id', 'transaction_id']
+    monetary:
+      method: minmax
+      feature_range: [0, 1]
+
+# Feature engineering
+features:
+  rfm:
+    recency_weight: 0.5
+    frequency_weight: 0.3
+    monetary_weight: 0.2
+  loyalty_score:
+    base_weight: 0.7
+    bonus_weight: 0.3
+    decay_factor: 0.1
+
+# Model parameters
+models:
+  xgboost:
+    max_depth: 6
+    learning_rate: 0.1
+    n_estimators: 100
+    objective: multi:softprob
+    eval_metric: mlogloss
+  lightgbm:
+    num_leaves: 31
+    learning_rate: 0.1
+    n_estimators: 100
+    objective: multiclass
+    metric: multi_logloss
+  random_forest:
+    n_estimators: 100
+    max_depth: 10
+    min_samples_split: 2
+    min_samples_leaf: 1
+
+# Training settings
+training:
+  test_size: 0.2
+  random_state: 42
+  cv_folds: 5
+  early_stopping_rounds: 10
+  class_weights: balanced
+
+# Optimization
+optimization:
+  method: bayesian
+  n_trials: 100
+  timeout: 3600  # 1 hour
+  metric: f1_weighted
+
+# Evaluation
+evaluation:
+  metrics:
+    - accuracy
+    - precision_weighted
+    - recall_weighted
+    - f1_weighted
+    - roc_auc_ovr
+  threshold_tuning:
+    method: f1
+    cv: 5 

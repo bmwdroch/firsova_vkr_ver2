@@ -1,0 +1,34 @@
+# Application configuration
+
+# Database settings
+database:
+  host: localhost
+  port: 5432
+  name: acoola_loyalty
+  user: ${DB_USER}
+  password: ${DB_PASSWORD}
+
+# API settings
+api:
+  host: 0.0.0.0
+  port: 8000
+  debug: false
+  cors_origins: ["http://localhost:3000"]
+
+# Logging settings
+logging:
+  level: INFO
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: logs/app.log
+
+# GUI settings
+gui:
+  theme: light
+  language: ru
+  window_size: [1024, 768]
+
+# Model settings
+model:
+  path: models/loyalty_classifier.pkl
+  version: 1.0.0
+  update_interval: 86400  # 24 hours in seconds 
