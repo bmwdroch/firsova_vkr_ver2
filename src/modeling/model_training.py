@@ -42,63 +42,97 @@ class ModelTrainer:
         os.makedirs(models_dir, exist_ok=True)
         os.makedirs(results_dir, exist_ok=True)
         
-    def add_base_models(self, class_weights=None):
+    def add_base_models(self, class_weights=None, model_custom_params: dict = None):
         """
         Добавляет базовые модели классификации.
         
         Args:
             class_weights (dict, optional): Веса классов для учета несбалансированности.
+            model_custom_params (dict, optional): Словарь с пользовательскими гиперпараметрами для моделей.
+                                                 Ключ - имя модели, значение - словарь гиперпараметров.
         """
-        self.models['logistic_regression'] = LogisticRegression(
-            max_iter=1000, 
-            class_weight=class_weights, 
-            random_state=42
-        )
+        if model_custom_params is None:
+            model_custom_params = {}
+
+        # Logistic Regression
+        lr_params = {
+            'max_iter': 1000, 
+            'class_weight': class_weights, 
+            'random_state': 42,
+            **model_custom_params.get('logistic_regression', {})
+        }
+        self.models['logistic_regression'] = LogisticRegression(**lr_params)
         
-        self.models['random_forest'] = RandomForestClassifier(
-            n_estimators=100,
-            class_weight=class_weights,
-            random_state=42
-        )
+        # Random Forest
+        rf_params = {
+            'n_estimators': 100,
+            'class_weight': class_weights,
+            'random_state': 42,
+            **model_custom_params.get('random_forest', {})
+        }
+        self.models['random_forest'] = RandomForestClassifier(**rf_params)
         
-        self.models['gradient_boosting'] = GradientBoostingClassifier(
-            n_estimators=100,
-            random_state=42
-        )
+        # Gradient Boosting
+        gb_params = {
+            'n_estimators': 100,
+            'random_state': 42,
+            **model_custom_params.get('gradient_boosting', {})
+        }
+        # GradientBoostingClassifier не принимает class_weight напрямую в конструкторе,
+        # но его можно учесть через sample_weight при обучении, если потребуется
+        self.models['gradient_boosting'] = GradientBoostingClassifier(**gb_params)
         
-        self.models['xgboost'] = XGBClassifier(
-            n_estimators=100,
-            use_label_encoder=False,
-            eval_metric='mlogloss',
-            random_state=42
-        )
+        # XGBoost
+        xgb_params = {
+            'n_estimators': 100,
+            'use_label_encoder': False, # deprecated, use enable_categorical=True for newer versions
+            'eval_metric': 'mlogloss',
+            'random_state': 42,
+            **model_custom_params.get('xgboost', {})
+        }
+        # XGBoost может использовать scale_pos_weight для балансировки или sample_weight
+        self.models['xgboost'] = XGBClassifier(**xgb_params)
         
-        self.models['lightgbm'] = LGBMClassifier(
-            n_estimators=100,
-            class_weight=class_weights,
-            min_child_samples=20,
-            min_split_gain=0.1,
-            random_state=42,
-            verbosity=-1
-        )
+        # LightGBM
+        lgbm_params = {
+            'n_estimators': 100,
+            'class_weight': class_weights, # Поддерживается
+            'min_child_samples': 20, # Пример параметра по умолчанию
+            'min_split_gain': 0.1,   # Пример параметра по умолчанию
+            'random_state': 42,
+            'verbosity': -1,
+            **model_custom_params.get('lightgbm', {})
+        }
+        self.models['lightgbm'] = LGBMClassifier(**lgbm_params)
         
-        self.models['svm'] = SVC(
-            probability=True,
-            class_weight=class_weights,
-            random_state=42
-        )
+        # SVM
+        svm_params = {
+            'probability': True,
+            'class_weight': class_weights,
+            'random_state': 42,
+            **model_custom_params.get('svm', {})
+        }
+        self.models['svm'] = SVC(**svm_params)
     
-    def add_custom_model(self, name, model):
+    def add_custom_model(self, name, model_class, hyperparams: dict = None):
         """
-        Добавляет пользовательскую модель.
+        Добавляет пользовательскую модель с возможностью указания гиперпараметров.
         
         Args:
             name (str): Имя модели.
-            model: Экземпляр модели.
+            model_class: Класс модели (например, RandomForestClassifier).
+            hyperparams (dict, optional): Словарь гиперпараметров для модели.
         """
-        self.models[name] = model
+        if hyperparams is None:
+            hyperparams = {}
+        # Убедимся, что random_state передается, если он применим и не задан
+        # Это общая логика, специфичные модели могут требовать другой обработки
+        if 'random_state' not in hyperparams and hasattr(model_class(), 'random_state'):
+            hyperparams['random_state'] = 42
+            
+        self.models[name] = model_class(**hyperparams)
     
-    def create_voting_ensemble(self, estimators=None, voting='soft'):
+    def create_voting_ensemble(self, estimators=None, voting='soft', hyperparams: dict = None):
         """
         Создает ансамблевую модель голосования.
         
@@ -106,16 +140,21 @@ class ModelTrainer:
             estimators (list, optional): Список кортежей (имя, модель).
                 Если None, используются все базовые модели.
             voting (str): Тип голосования ('hard' или 'soft').
+            hyperparams (dict, optional): Словарь гиперпараметров для ансамблевой модели.
         """
         if estimators is None:
             estimators = [(name, model) for name, model in self.models.items()]
         
+        if hyperparams is None:
+            hyperparams = {}
+        
         self.models['voting_ensemble'] = VotingClassifier(
             estimators=estimators,
-            voting=voting
+            voting=voting,
+            **hyperparams
         )
     
-    def create_stacking_ensemble(self, estimators=None, final_estimator=None):
+    def create_stacking_ensemble(self, estimators=None, final_estimator=None, hyperparams: dict = None):
         """
         Создает ансамблевую модель стекинга.
         
@@ -124,6 +163,7 @@ class ModelTrainer:
                 Если None, используются все базовые модели.
             final_estimator: Модель второго уровня.
                 Если None, используется логистическая регрессия.
+            hyperparams (dict, optional): Словарь гиперпараметров для ансамблевой модели.
         """
         if estimators is None:
             estimators = [(name, model) for name, model in self.models.items()]
@@ -131,12 +171,16 @@ class ModelTrainer:
         if final_estimator is None:
             final_estimator = LogisticRegression(max_iter=1000)
         
+        if hyperparams is None:
+            hyperparams = {}
+        
         self.models['stacking_ensemble'] = StackingClassifier(
             estimators=estimators,
-            final_estimator=final_estimator
+            final_estimator=final_estimator,
+            **hyperparams
         )
     
-    def train_model(self, name, X_train, y_train):
+    def train_model(self, name, X_train, y_train, sample_weight=None):
         """
         Обучает модель.
         
@@ -144,30 +188,61 @@ class ModelTrainer:
             name (str): Имя модели.
             X_train: Обучающие данные.
             y_train: Целевые значения.
+            sample_weight (array-like, optional): Веса для образцов.
+                                                 Используется для моделей, которые это поддерживают,
+                                                 например, если class_weights не применяется напрямую.
             
         Returns:
             Обученная модель.
         """
         start_time = time.time()
         model = self.models[name]
-        model.fit(X_train, y_train)
+
+        fit_params = {}
+        if sample_weight is not None:
+            # Некоторые модели принимают sample_weight в fit
+            # Проверяем, есть ли такой параметр у метода fit
+            import inspect
+            sig = inspect.signature(model.fit)
+            if 'sample_weight' in sig.parameters:
+                fit_params['sample_weight'] = sample_weight
+            else:
+                print(f"Предупреждение: Модель {name} не поддерживает sample_weight в fit.")
+
+        if not fit_params: # Если sample_weight не был добавлен
+             model.fit(X_train, y_train)
+        else:
+             model.fit(X_train, y_train, **fit_params)
+
         training_time = time.time() - start_time
         
         self.results.setdefault(name, {})['training_time'] = training_time
         
         return model
     
-    def train_all_models(self, X_train, y_train):
+    def train_all_models(self, X_train, y_train, class_weights_dict=None):
         """
         Обучает все модели.
         
         Args:
             X_train: Обучающие данные.
             y_train: Целевые значения.
+            class_weights_dict (dict, optional): Словарь весов классов для sample_weight. 
+                                                Ключ - класс, значение - вес.
         """
+        sample_weights_train = None
+        if class_weights_dict is not None and isinstance(y_train, (pd.Series, np.ndarray)):
+            # Преобразуем y_train в массив numpy, если это pd.Series, для map
+            y_train_array = y_train.to_numpy() if isinstance(y_train, pd.Series) else y_train
+            # Убедимся, что y_train_array - это 1D массив целых чисел (классов)
+            if y_train_array.ndim == 1 and np.issubdtype(y_train_array.dtype, np.integer):
+                sample_weights_train = np.array([class_weights_dict.get(cls, 1.0) for cls in y_train_array])
+            else:
+                print("Предупреждение: y_train должен быть 1D массивом целых чисел для использования class_weights_dict с sample_weight.")
+
         for name in self.models:
             print(f"Обучение модели: {name}")
-            self.train_model(name, X_train, y_train)
+            self.train_model(name, X_train, y_train, sample_weight=sample_weights_train)
     
     def evaluate_model(self, name, X_test, y_test):
         """

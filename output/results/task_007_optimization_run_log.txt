@@ -1,0 +1,348 @@
+PS C:\Users\User\Documents\firsova_vkr> python src/run_pipeline.py --input_file dataset/Concept202408.csv --tune_hyperparams --sa
+PS C:\Users\User\Documents\firsova_vkr> python src/run_pipeline.py --input_file dataset/Concept202408.csv --tune_hyperparams --save_intermediate --n_opt_trials 5
+Начало выполнения: 2025-05-09 23:29:47
+
+--- Шаг 1: Предобработка данных ---
+Загрузка данных из dataset/Concept202408.csv...
+Данные загружены. Размерность: (418888, 19)
+Выполнение предобработки данных...
+Начало предобработки данных
+Обработка пропущенных значений...
+Количество пропущенных значений до обработки: 7679
+Количество пропущенных значений после обработки: 0
+Обработано пропущенных значений: 7679
+Обработка выбросов...
+Переменная 'Cумма покупки': обнаружено 11762 выбросов (2.81%)
+Переменная 'Начислено бонусов': обнаружено 18793 выбросов (4.49%)
+Переменная 'Списано бонусов': обнаружено 80007 выбросов (19.10%)
+Переменная 'Средняя сумма покупок': обнаружено 17995 выбросов (4.30%)
+Переменная 'Частота, раз/мес': обнаружено 88335 выбросов (21.09%)
+Переменная 'Баланс накопленный': обнаружено 31248 выбросов (7.46%)
+Переменная 'Баланс подарочный': обнаружено 67415 выбросов (16.09%)
+Нормализация числовых признаков...
+Применено масштабирование к диапазону [0, 1] для переменных: Cумма покупки, Начислено бонусов, Списано бонусов, Средняя сумма пок
+Применено масштабирование к диапазону [0, 1] для переменных: Cумма покупки, Начислено бонусов, Списано бонусов, Средняя сумма покупок, Баланс накопленный, Баланс подарочный
+Применена стандартизация для переменных: Частота, раз/мес, Покупок, в днях
+Кодирование категориальных переменных...
+Кодирование переменной 'Пол': {'M': np.int64(0), 'Ж': np.int64(1)}
+Созданы one-hot encoding признаки для 10 наиболее частых точек продаж
+Созданы one-hot encoding признаки для категорий товаров
+Создание агрегированных данных на уровне клиента...
+Типы данных столбцов:
+Клиент: int64
+Пол: object
+Точка продаж где оформлена карта: object
+Дата оформления карты: object
+Дата покупки: object
+Точка продаж: object
+Название товара: object
+Cумма покупки: float64
+Количество: int64
+Скидка внешняя: int64
+Начислено бонусов: float64
+Списано бонусов: float64
+Дата первого чека: object
+Дата последнего чека: object
+Покупок, в днях: float64
+Частота, раз/мес: float64
+Средняя сумма покупок: float64
+Баланс накопленный: float64
+Баланс подарочный: float64
+Пол_encoded: int64
+top_location: object
+location_Другое: bool
+location_Интернет-магазин: bool
+location_Казань.Тандем.Acoola: bool
+location_Мск.Балашиха.Вертикаль.Acoola Maxi: bool
+location_Мск.Калита.Acoola Maxi: bool
+location_Мск.Колумбус.Acoola: bool
+location_Мск.Мари.Acoola Maxi: bool
+location_СПб.Меркурий.Acoola: bool
+location_СПб.Невский-2.Acoola: bool
+location_ТЦ Южный Полюс Санкт-Петербург г, Пражская ул, д. 48/50,3: bool
+location_г. Чебоксары, Приволжский б-р, д.2, помещение 3: bool
+product_category: object
+product_Аксессуары: bool
+product_Брюки: bool
+product_Верхняя одежда: bool
+product_Другое: bool
+product_Костюмы: bool
+product_Платья: bool
+product_Рубашки: bool
+product_Футболки: bool
+product_Юбки: bool
+Применение следующих функций агрегации: {'Cумма покупки': ['count', 'sum', 'mean', 'std'], 'Дата покупки': ['min', 'max'], 'Начис
+Применение следующих функций агрегации: {'Cумма покупки': ['count', 'sum', 'mean', 'std'], 'Дата покупки': ['min', 'max'], 'Начислено бонусов': ['sum', 'mean'], 'Списано бонусов': ['sum', 'mean'], 'Пол_encoded': 'first', 'location_Другое': 'mean', 'location_
+Применение следующих функций агрегации: {'Cумма покупки': ['count', 'sum', 'mean', 'std'], 'Дата покупки': ['min', 'max'], 'Начислено бонусов': ['sum', 'mean'], 'Списано бонусов': ['sum', 'mean'], 'Пол_encoded': 'first', 'location_Другое': 'mean', 'location_Интернет-магазин': 'mean', 'location_Казань.Тандем.Acoola': 'mean', 'location_Мск.Балашиха.Вертикаль.Acoola Maxi': 'mean', 'locat
+Применение следующих функций агрегации: {'Cумма покупки': ['count', 'sum', 'mean', 'std'], 'Дата покупки': ['min', 'max'], 'Начислено бонусов': ['sum', 'mean'], 'Списано бонусов': ['sum', 'mean'], 'Пол_encoded': 'first', 'location_Другое': 'mean', 'location_Интернет-магазин': 'mean', 'location_Казань.Тандем.Acoola': 'mean', 'location_Мск.Балашиха.Вертикаль.Acoola Maxi': 'mean', 'location_Мск.Калита.Acoola Maxi': 'mean', 'location_Мск.Колумбус.Acoola': 'mean', 'location_Мск.Мари.Acoola Maxi': 'mean', 'location_С
+Применение следующих функций агрегации: {'Cумма покупки': ['count', 'sum', 'mean', 'std'], 'Дата покупки': ['min', 'max'], 'Начислено бонусов': ['sum', 'mean'], 'Списано бонусов': ['sum', 'mean'], 'Пол_encoded': 'first', 'location_Другое': 'mean', 'location_Интернет-магазин': 'mean', 'location_Казань.Тандем.Acoola': 'mean', 'location_Мск.Балашиха.Вертикаль.Acoola Maxi': 'mean', 'location_Мск.Калита.Acoola Maxi': 'mean', 'location_Мск.Колумбус.Acoola': 'mean', 'location_Мск.Мари.Acoola Maxi': 'mean', 'location_СПб.Меркурий.Acoola': 'mean', 'location_СПб.Невский-2.Acoola': 'mean', 'location_ТЦ Южный Полюс Санкт-Петербург г, Пражская ул, д.
+Применение следующих функций агрегации: {'Cумма покупки': ['count', 'sum', 'mean', 'std'], 'Дата покупки': ['min', 'max'], 'Начислено бонусов': ['sum', 'mean'], 'Списано бонусов': ['sum', 'mean'], 'Пол_encoded': 'first', 'location_Другое': 'mean', 'location_Интернет-магазин': 'mean', 'location_Казань.Тандем.Acoola': 'mean', 'location_Мск.Балашиха.Вертикаль.Acoola Maxi': 'mean', 'location_Мск.Калита.Acoola Maxi': 'mean', 'location_Мск.Колумбус.Acoola': 'mean', 'location_Мск.Мари.Acoola Maxi': 'mean', 'location_СПб.Меркурий.Acoola': 'mean', 'location_СПб.Невский-2.Acoola': 'mean', 'location_ТЦ Южный Полюс Санкт-Петербург г, Пражская ул, д. 48/50,3': 'mean', 'location_г. Чебоксары, Приволжский б-р, д.2, помещение 3': 'mean', 'product_category': 'first', 'product_Аксе
+Применение следующих функций агрегации: {'Cумма покупки': ['count', 'sum', 'mean', 'std'], 'Дата покупки': ['min', 'max'], 'Начислено бонусов': ['sum', 'mean'], 'Списано бонусов': ['sum', 'mean'], 'Пол_encoded': 'first', 'location_Другое': 'mean', 'location_Интернет-магазин': 'mean', 'location_Казань.Тандем.Acoola': 'mean', 'location_Мск.Балашиха.Вертикаль.Acoola Maxi': 'mean', 'location_Мск.Калита.Acoola Maxi': 'mean', 'location_Мск.Колумбус.Acoola': 'mean', 'location_Мск.Мари.Acoola Maxi': 'mean', 'location_СПб.Меркурий.Acoola': 'mean', 'location_СПб.Невский-2.Acoola': 'mean', 'location_ТЦ Южный Полюс Санкт-Петербург г, Пражская ул, д. 48/50,3': 'mean', 'location_г. Чебоксары, Приволжский б-р, д.2, помещение 3': 'mean', 'product_category': 'first', 'product_Аксессуары': 'mean', 'product_Брюки': 'mean', 'product_Верхняя одежда': 'mean', 'product_Другое': 'mean', 'product_Костюмы': 'mean', 
+Применение следующих функций агрегации: {'Cумма покупки': ['count', 'sum', 'mean', 'std'], 'Дата покупки': ['min', 'max'], 'Начислено бонусов': ['sum', 'mean'], 'Списано бонусов': ['sum', 'mean'], 'Пол_encoded': 'first', 'location_Другое': 'mean', 'location_Интернет-магазин': 'mean', 'location_Казань.Тандем.Acoola': 'mean', 'location_Мск.Балашиха.Вертикаль.Acoola Maxi': 'mean', 'location_Мск.Калита.Acoola Maxi': 'mean', 'location_Мск.Колумбус.Acoola': 'mean', 'location_Мск.Мари.Acoola Maxi': 'mean', 'location_СПб.Меркурий.Acoola': 'mean', 'location_СПб.Невский-2.Acoola': 'mean', 'location_ТЦ Южный Полюс Санкт-Петербург г, Пражская ул, д. 48/50,3': 'mean', 'location_г. Чебоксары, Приволжский б-р, д.2, помещение 3': 'mean', 'product_category': 'first', 'product_Аксессуары': 'mean', 'product_Брюки': 'mean', 'product_Верхняя одежда': 'mean', 'product_Другое': 'mean', 'product_Костюмы': 'mean', 'product_Платья': 'mean', 'product_Рубашки': 'mean', 'product_Футболки': 'mean', 'product_Юбки': 'mean'}
+Создан агрегированный датасет с 118377 клиентами и 37 признаками
+Подготовка итогового датасета...
+RFM-анализ выполнен, созданы сегменты лояльности клиентов
+Удалены строки с пропущенными значениями. Итоговый размер датасета: 91485 клиентов
+Подготовлен итоговый датасет для моделирования, содержащий 91485 клиентов и 43 признаков
+Предобработанные данные сохранены в ../output/preprocessed_data.csv
+Создание базового RFM-анализа...
+Подготовка итогового датасета...
+RFM-анализ выполнен, созданы сегменты лояльности клиентов
+Подготовлен итоговый датасет для моделирования, содержащий 91485 клиентов и 43 признаков
+Базовый RFM-датасет сохранен в ../output\base_rfm_dataset.pkl
+
+--- Шаг 2: Создание признаков лояльности ---
+Создание расширенных признаков лояльности...
+Создание расширенных признаков лояльности...
+Добавлены расширенные признаки использования бонусной программы
+Добавлены признаки стабильности покупок
+Добавлен взвешенный RFM-показатель
+Создано 7 новых признаков лояльности
+Выполнение кластеризации клиентов...
+Выполнение кластеризации клиентов на 5 кластеров...
+Характеристики полученных кластеров:
+          recency  frequency  monetary  avg_purchase  count
+cluster
+0        1.878650  12.902775  4.484670      0.376949   5513
+1        0.380846   3.867343  1.621380      0.434875  30364
+2        0.441525   3.615503  0.739019      0.208309  33878
+3        1.308632   4.285831  1.723314      0.446096   1228
+4        6.829285   3.691640  1.179368      0.323867  20502
+Распределение кластеров по сегментам лояльности:
+cluster_segment
+Низколояльные        33878
+Лояльные             30364
+Отток                20502
+Высоколояльные        5513
+Умеренно лояльные     1228
+Name: count, dtype: int64
+Расчет улучшенного показателя лояльности...
+Расчет улучшенного показателя лояльности...
+PCA выполнен. Объясненная дисперсия по компонентам:
+Компонента 1: 0.1553 (15.53%)
+Компонента 2: 0.0822 (8.22%)
+Компонента 3: 0.0748 (7.48%)
+Суммарная объясненная дисперсия: 31.22%
+Формирование дискретных категорий лояльности методом quantile...
+Распределение клиентов по категориям лояльности:
+enhanced_loyalty_score_category
+Высоколояльные       18297
+Лояльные             18303
+Низколояльные        34927
+Умеренно лояльные    19958
+Name: count, dtype: int64
+Границы категорий: [0, 0.0, 0.14583333333333334, 0.20669164944396795, 0.2584789748588564, 1]
+Оценка распределения клиентов по категориям лояльности...
+Общее количество клиентов: 91485
+Количество категорий: 4
+Распределение клиентов по категориям:
+  Высоколояльные: 18297 (20.00%)
+  Лояльные: 18303 (20.01%)
+  Низколояльные: 34927 (38.18%)
+  Умеренно лояльные: 19958 (21.82%)
+Максимальный дисбаланс: 1.91:1
+Нормализованная энтропия распределения: 0.9692 (из 1.0)
+Оценка: Распределение категорий достаточно сбалансировано
+Соответствие с исходной RFM-сегментацией: 31.87%
+Формирование профилей категорий лояльности...
+Сформированы профили категорий лояльности
+
+Профили категорий лояльности:
+                                  recency  frequency  monetary  ...  purchase_stability  размер_категории  доля_категории
+enhanced_loyalty_score_category                                 ...
+Высоколояльные                   0.000055   5.110510  1.856536  ...            0.584624             18297        0.200000        
+Лояльные                         0.001530   4.999290  1.481664  ...            0.236065             18303        0.200066        
+Низколояльные                    5.103387   4.324963  1.391919  ...            0.298796             34927        0.381778        
+Умеренно лояльные                0.011274   2.802335  0.780849  ...            0.035871             19958        0.218156        
+
+[4 rows x 13 columns]
+Расчет улучшенного показателя лояльности завершен
+Распределение по категориям лояльности:
+enhanced_loyalty_score_category
+Низколояльные        34927
+Умеренно лояльные    19958
+Лояльные             18303
+Высоколояльные       18297
+Name: count, dtype: int64
+Подготовка финального датасета для моделирования...
+Подготовка итогового датасета с улучшенными признаками лояльности...
+Распределение целевой переменной:
+  Класс 0: 34927 (38.18%)
+  Класс 1: 19958 (21.82%)
+  Класс 2: 18303 (20.01%)
+  Класс 3: 18297 (20.00%)
+Оценка распределения клиентов по категориям лояльности...
+Общее количество клиентов: 91485
+Количество категорий: 4
+Распределение клиентов по категориям:
+  0: 34927 (38.18%)
+  1: 19958 (21.82%)
+  2: 18303 (20.01%)
+  3: 18297 (20.00%)
+Максимальный дисбаланс: 1.91:1
+Нормализованная энтропия распределения: 0.9692 (из 1.0)
+Оценка: Распределение категорий достаточно сбалансировано
+Оценка информативности признаков...
+Оценка информативности признаков...
+Вычисление корреляций Пирсона...
+Вычисление взаимной информации...
+Вычисление Permutation Importance...
+Вычисление SHAP Values...
+DEBUG SHAP: shape of mean_abs_shap: (44, 4)
+DEBUG SHAP: length of features list: 44
+Ошибка при вычислении SHAP Values: Expected a 1D array, got an array with shape (44, 4)
+Оценка информативности признаков завершена. Проанализировано 44 признаков.
+Топ-10 наиболее важных признаков:
+1. recency_ratio: 0.9026
+2. purchase_amount_cv: 0.9012
+3. purchase_stability: 0.8625
+4. recency: 0.6035
+5. pca_component_3: 0.5020
+6. monetary: 0.4519
+7. Cумма покупки_std: 0.2799
+8. pca_component_2: 0.2617
+9. avg_purchase: 0.2479
+10. pca_component_1: 0.2416
+Выбор наиболее информативных признаков (метод: score, порог: 0.05, макс: 50)...
+Отобрано 18 признаков по важности
+Итоговое количество признаков для моделирования: 18
+Признаки, используемые для обучения: ['recency_ratio', 'purchase_amount_cv', 'purchase_stability', 'recency', 'pca_component_3', 
+Признаки, используемые для обучения: ['recency_ratio', 'purchase_amount_cv', 'purchase_stability', 'recency', 'pca_component_3', 'monetary', 'Cумма покупки_std', 'pca_component_2', 'avg_purchase', 'pca_component_1', 'cluster', 'bonus_earning_ratio', 'Начисле
+Признаки, используемые для обучения: ['recency_ratio', 'purchase_amount_cv', 'purchase_stability', 'recency', 'pca_component_3', 'monetary', 'Cумма покупки_std', 'pca_component_2', 'avg_purchase', 'pca_component_1', 'cluster', 'bonus_earning_ratio', 'Начислено бонусов_sum', 'bonus_activity', 'Начислено бонусов_mean', 'frequency', 'purchase_frequency', 'purchase_density']
+Разделение на обучающую и тестовую выборки (тест: 20.0%)...
+Целевая переменная для обучения и стратификации: loyalty_target
+Размер обучающей выборки: 73188 примеров
+Размер тестовой выборки: 18297 примеров
+Распределение классов в обучающей выборке:
+  Класс 0: 38.18%
+  Класс 1: 21.82%
+  Класс 2: 20.01%
+  Класс 3: 20.00%
+Распределение классов в тестовой выборке:
+  Класс 0: 38.18%
+  Класс 1: 21.82%
+  Класс 2: 20.01%
+  Класс 3: 20.00%
+Подготовка итогового датасета завершена.
+Количество признаков: 18
+Размер датасета (X) перед train/test split: 91485 примеров
+Датасет с признаками лояльности сохранен в ../output\loyalty_features_dataset.pkl
+Финальный датасет для моделирования сохранен в ../output\loyalty_dataset.pkl
+
+--- Шаг 3: Обучение моделей классификации ---
+Размер обучающей выборки: (73188, 18)
+Размер тестовой выборки: (18297, 18)
+Количество признаков: 18
+Распределение классов (обучающая выборка):
+  - Высоколояльные: 27942 (38.18%)
+  - Лояльные: 15966 (21.82%)
+  - Низколояльные: 14642 (20.01%)
+  - Умеренно лояльные: 14638 (20.00%)
+
+--- Запуск оптимизации гиперпараметров ---
+
+Оптимизация для random_forest...
+[I 2025-05-10 00:04:04,968] A new study created in memory with name: no-name-ce7aefff-9018-4c57-890b-b84d2d5d653d
+[I 2025-05-10 00:05:13,308] Trial 0 finished with value: 0.99348773191206 and parameters: {'n_estimators': 200, 'max_depth': 44, 
+[I 2025-05-10 00:05:13,308] Trial 0 finished with value: 0.99348773191206 and parameters: {'n_estimators': 200, 'max_depth': 44, 'min_samples_split': 23, 'min_samples_leaf': 18, 'criterion': 'gini'}. Best is trial 0 with value: 0.99348773191206.
+[I 2025-05-10 00:05:32,916] Trial 1 finished with value: 0.9939210259273837 and parameters: {'n_estimators': 50, 'max_depth': 34,
+[I 2025-05-10 00:05:32,916] Trial 1 finished with value: 0.9939210259273837 and parameters: {'n_estimators': 50, 'max_depth': 34, 'min_samples_split': 19, 'min_samples_leaf': 22, 'criterion': 'entropy'}. Best is trial 1 with value: 0.9939210259273837.       
+[I 2025-05-10 00:07:41,535] Trial 2 finished with value: 0.9438703341109035 and parameters: {'n_estimators': 450, 'max_depth': 5,
+[I 2025-05-10 00:07:41,535] Trial 2 finished with value: 0.9438703341109035 and parameters: {'n_estimators': 450, 'max_depth': 5, 'min_samples_split': 7, 'min_samples_leaf': 6, 'criterion': 'entropy'}. Best is trial 1 with value: 0.9939210259273837.
+[I 2025-05-10 00:09:00,965] Trial 3 finished with value: 0.9676118165155142 and parameters: {'n_estimators': 250, 'max_depth': 6,
+[I 2025-05-10 00:09:00,965] Trial 3 finished with value: 0.9676118165155142 and parameters: {'n_estimators': 250, 'max_depth': 6, 'min_samples_split': 19, 'min_samples_leaf': 5, 'criterion': 'entropy'}. Best is trial 1 with value: 0.9939210259273837.        
+[I 2025-05-10 00:10:24,237] Trial 4 finished with value: 0.9942839909893516 and parameters: {'n_estimators': 250, 'max_depth': 26
+[I 2025-05-10 00:10:24,237] Trial 4 finished with value: 0.9942839909893516 and parameters: {'n_estimators': 250, 'max_depth': 26, 'min_samples_split': 7, 'min_samples_leaf': 16, 'criterion': 'gini'}. Best is trial 4 with value: 0.9942839909893516.
+Лучшие гиперпараметры: {'n_estimators': 250, 'max_depth': 26, 'min_samples_split': 7, 'min_samples_leaf': 16, 'criterion': 'gini'
+Лучшие гиперпараметры: {'n_estimators': 250, 'max_depth': 26, 'min_samples_split': 7, 'min_samples_leaf': 16, 'criterion': 'gini'}
+Лучшее значение метрики (f1_macro): 0.9942839909893516
+Оптимизация для random_forest завершена. Лучший F1 (macro): 0.9943
+
+Оптимизация для xgboost...
+[I 2025-05-10 00:10:24,243] A new study created in memory with name: no-name-fb2aec08-9baa-4569-9aec-a8f0059f6f76
+[I 2025-05-10 00:10:42,103] Trial 0 finished with value: 0.9982113743353124 and parameters: {'n_estimators': 400, 'learning_rate'
+[I 2025-05-10 00:10:42,103] Trial 0 finished with value: 0.9982113743353124 and parameters: {'n_estimators': 400, 'learning_rate': 0.22648248189516848, 'max_depth': 12, 'subsample': 0.7993292420985183, 'colsample_bytree': 0.5780093202212182, 'gamma': 2.27505
+[I 2025-05-10 00:10:42,103] Trial 0 finished with value: 0.9982113743353124 and parameters: {'n_estimators': 400, 'learning_rate': 0.22648248189516848, 'max_depth': 12, 'subsample': 0.7993292420985183, 'colsample_bytree': 0.5780093202212182, 'gamma': 2.275053705838343e-07, 'lambda': 2.9152036385288193e-08, 'alpha': 0.08499808989182997}. Best is trial 0 with value: 0.9982113743353124. 
+[I 2025-05-10 00:10:57,691] Trial 1 finished with value: 0.9981537362249924 and parameters: {'n_estimators': 650, 'learning_rate'
+[I 2025-05-10 00:10:57,691] Trial 1 finished with value: 0.9981537362249924 and parameters: {'n_estimators': 650, 'learning_rate': 0.05675206026988748, 'max_depth': 3, 'subsample': 0.9849549260809971, 'colsample_bytree': 0.9162213204002109, 'gamma': 7.032853
+[I 2025-05-10 00:10:57,691] Trial 1 finished with value: 0.9981537362249924 and parameters: {'n_estimators': 650, 'learning_rate': 0.05675206026988748, 'max_depth': 3, 'subsample': 0.9849549260809971, 'colsample_bytree': 0.9162213204002109, 'gamma': 7.032853236588588e-07, 'lambda': 2.8483918709107956e-07, 'alpha': 2.9324868872723725e-07}. Best is trial 0 with value: 0.9982113743353124
+[I 2025-05-10 00:10:57,691] Trial 1 finished with value: 0.9981537362249924 and parameters: {'n_estimators': 650, 'learning_rate': 0.05675206026988748, 'max_depth': 3, 'subsample': 0.9849549260809971, 'colsample_bytree': 0.9162213204002109, 'gamma': 7.032853236588588e-07, 'lambda': 2.8483918709107956e-07, 'alpha': 2.9324868872723725e-07}. Best is trial 0 with value: 0.9982113743353124.
+[I 2025-05-10 00:11:14,867] Trial 2 finished with value: 0.9980260934227522 and parameters: {'n_estimators': 350, 'learning_rate'
+[I 2025-05-10 00:11:14,867] Trial 2 finished with value: 0.9980260934227522 and parameters: {'n_estimators': 350, 'learning_rate': 0.0199473547030745, 'max_depth': 8, 'subsample': 0.645614570099021, 'colsample_bytree': 0.8059264473611898, 'gamma': 1.63475588
+[I 2025-05-10 00:11:14,867] Trial 2 finished with value: 0.9980260934227522 and parameters: {'n_estimators': 350, 'learning_rate': 0.0199473547030745, 'max_depth': 8, 'subsample': 0.645614570099021, 'colsample_bytree': 0.8059264473611898, 'gamma': 1.634755885510359e-07, 'lambda': 2.1734877073417355e-06, 'alpha': 8.528933855762793e-06}. Best is trial 0 with value: 0.9982113743353124.  
+[I 2025-05-10 00:11:28,212] Trial 3 finished with value: 0.9983972376500404 and parameters: {'n_estimators': 500, 'learning_rate'
+[I 2025-05-10 00:11:28,212] Trial 3 finished with value: 0.9983972376500404 and parameters: {'n_estimators': 500, 'learning_rate': 0.08810003129071789, 'max_depth': 5, 'subsample': 0.7571172192068059, 'colsample_bytree': 0.7962072844310213, 'gamma': 2.535541
+[I 2025-05-10 00:11:28,212] Trial 3 finished with value: 0.9983972376500404 and parameters: {'n_estimators': 500, 'learning_rate': 0.08810003129071789, 'max_depth': 5, 'subsample': 0.7571172192068059, 'colsample_bytree': 0.7962072844310213, 'gamma': 2.535541638745669e-08, 'lambda': 0.0007250347382396634, 'alpha': 2.3130924416844053e-07}. Best is trial 3 with value: 0.9983972376500404.
+[I 2025-05-10 00:11:33,280] Trial 4 finished with value: 0.998102223429794 and parameters: {'n_estimators': 100, 'learning_rate':
+[I 2025-05-10 00:11:33,280] Trial 4 finished with value: 0.998102223429794 and parameters: {'n_estimators': 100, 'learning_rate': 0.22413234378101138, 'max_depth': 15, 'subsample': 0.9041986740582306, 'colsample_bytree': 0.6523068845866853, 'gamma': 7.073702
+[I 2025-05-10 00:11:33,280] Trial 4 finished with value: 0.998102223429794 and parameters: {'n_estimators': 100, 'learning_rate': 0.22413234378101138, 'max_depth': 15, 'subsample': 0.9041986740582306, 'colsample_bytree': 0.6523068845866853, 'gamma': 7.073702489270826e-08, 'lambda': 0.0029775853025212607, 'alpha': 3.320625892007924e-05}. Best is trial 3 with value: 0.9983972376500404. 
+Лучшие гиперпараметры: {'n_estimators': 500, 'learning_rate': 0.08810003129071789, 'max_depth': 5, 'subsample': 0.757117219206805
+Лучшие гиперпараметры: {'n_estimators': 500, 'learning_rate': 0.08810003129071789, 'max_depth': 5, 'subsample': 0.7571172192068059, 'colsample_bytree': 0.7962072844310213, 'gamma': 2.535541638745669e-08, 'lambda': 0.0007250347382396634, 'alpha': 2.3130924416
+Лучшие гиперпараметры: {'n_estimators': 500, 'learning_rate': 0.08810003129071789, 'max_depth': 5, 'subsample': 0.7571172192068059, 'colsample_bytree': 0.7962072844310213, 'gamma': 2.535541638745669e-08, 'lambda': 0.0007250347382396634, 'alpha': 2.3130924416844053e-07}
+Лучшее значение метрики (f1_macro): 0.9983972376500404
+Оптимизация для xgboost завершена. Лучший F1 (macro): 0.9984
+
+Оптимизация для lightgbm...
+[I 2025-05-10 00:11:33,283] A new study created in memory with name: no-name-032df4c4-a8dc-45a9-ba95-0beaca4aa043
+[I 2025-05-10 00:11:50,179] Trial 0 finished with value: 0.9985268852626166 and parameters: {'n_estimators': 400, 'learning_rate'
+[I 2025-05-10 00:11:50,179] Trial 0 finished with value: 0.9985268852626166 and parameters: {'n_estimators': 400, 'learning_rate': 0.22648248189516848, 'max_depth': 12, 'num_leaves': 398, 'subsample': 0.5780093202212182, 'colsample_bytree': 0.577997260168101
+[I 2025-05-10 00:11:50,179] Trial 0 finished with value: 0.9985268852626166 and parameters: {'n_estimators': 400, 'learning_rate': 0.22648248189516848, 'max_depth': 12, 'num_leaves': 398, 'subsample': 0.5780093202212182, 'colsample_bytree': 0.5779972601681014, 'reg_alpha': 3.3323645788192616e-08, 'reg_lambda': 0.6245760287469893}. Best is trial 0 with value: 0.9985268852626166.       
+[I 2025-05-10 00:12:02,770] Trial 1 finished with value: 0.9985781864094118 and parameters: {'n_estimators': 650, 'learning_rate'
+[I 2025-05-10 00:12:02,770] Trial 1 finished with value: 0.9985781864094118 and parameters: {'n_estimators': 650, 'learning_rate': 0.05675206026988748, 'max_depth': 3, 'num_leaves': 2579, 'subsample': 0.9162213204002109, 'colsample_bytree': 0.606169555339138
+[I 2025-05-10 00:12:02,770] Trial 1 finished with value: 0.9985781864094118 and parameters: {'n_estimators': 650, 'learning_rate': 0.05675206026988748, 'max_depth': 3, 'num_leaves': 2579, 'subsample': 0.9162213204002109, 'colsample_bytree': 0.6061695553391381, 'reg_alpha': 4.329370014459266e-07, 'reg_lambda': 4.4734294104626844e-07}. Best is trial 1 with value: 0.9985781864094118.    
+[I 2025-05-10 00:12:16,606] Trial 2 finished with value: 0.998520771242028 and parameters: {'n_estimators': 350, 'learning_rate':
+[I 2025-05-10 00:12:16,606] Trial 2 finished with value: 0.998520771242028 and parameters: {'n_estimators': 350, 'learning_rate': 0.0199473547030745, 'max_depth': 8, 'num_leaves': 85, 'subsample': 0.8059264473611898, 'colsample_bytree': 0.569746930326021, 'r
+[I 2025-05-10 00:12:16,606] Trial 2 finished with value: 0.998520771242028 and parameters: {'n_estimators': 350, 'learning_rate': 0.0199473547030745, 'max_depth': 8, 'num_leaves': 85, 'subsample': 0.8059264473611898, 'colsample_bytree': 0.569746930326021, 'reg_alpha': 4.258943089524393e-06, 'reg_lambda': 1.9826980964985924e-05}. Best is trial 1 with value: 0.9985781864094118.
+[I 2025-05-10 00:12:30,431] Trial 3 finished with value: 0.9987751387975194 and parameters: {'n_estimators': 500, 'learning_rate'
+[I 2025-05-10 00:12:30,431] Trial 3 finished with value: 0.9987751387975194 and parameters: {'n_estimators': 500, 'learning_rate': 0.08810003129071789, 'max_depth': 5, 'num_leaves': 260, 'subsample': 0.7962072844310213, 'colsample_bytree': 0.5232252063599989
+[I 2025-05-10 00:12:30,431] Trial 3 finished with value: 0.9987751387975194 and parameters: {'n_estimators': 500, 'learning_rate': 0.08810003129071789, 'max_depth': 5, 'num_leaves': 260, 'subsample': 0.7962072844310213, 'colsample_bytree': 0.5232252063599989, 'reg_alpha': 0.0029369981104377003, 'reg_lambda': 3.425445902633376e-07}. Best is trial 3 with value: 0.9987751387975194.      
+[I 2025-05-10 00:12:36,820] Trial 4 finished with value: 0.9985269802676062 and parameters: {'n_estimators': 100, 'learning_rate'
+[I 2025-05-10 00:12:36,820] Trial 4 finished with value: 0.9985269802676062 and parameters: {'n_estimators': 100, 'learning_rate': 0.22413234378101138, 'max_depth': 15, 'num_leaves': 1143, 'subsample': 0.6523068845866853, 'colsample_bytree': 0.54883605700319
+[I 2025-05-10 00:12:36,820] Trial 4 finished with value: 0.9985269802676062 and parameters: {'n_estimators': 100, 'learning_rate': 0.22413234378101138, 'max_depth': 15, 'num_leaves': 1143, 'subsample': 0.6523068845866853, 'colsample_bytree': 0.5488360570031919, 'reg_alpha': 0.014391207615728067, 'reg_lambda': 9.148975058772307e-05}. Best is trial 3 with value: 0.9987751387975194.     
+Лучшие гиперпараметры: {'n_estimators': 500, 'learning_rate': 0.08810003129071789, 'max_depth': 5, 'num_leaves': 260, 'subsample'
+Лучшие гиперпараметры: {'n_estimators': 500, 'learning_rate': 0.08810003129071789, 'max_depth': 5, 'num_leaves': 260, 'subsample': 0.7962072844310213, 'colsample_bytree': 0.5232252063599989, 'reg_alpha': 0.0029369981104377003, 'reg_lambda': 3.425445902633376
+Лучшие гиперпараметры: {'n_estimators': 500, 'learning_rate': 0.08810003129071789, 'max_depth': 5, 'num_leaves': 260, 'subsample': 0.7962072844310213, 'colsample_bytree': 0.5232252063599989, 'reg_alpha': 0.0029369981104377003, 'reg_lambda': 3.425445902633376e-07}
+Лучшее значение метрики (f1_macro): 0.9987751387975194
+Оптимизация для lightgbm завершена. Лучший F1 (macro): 0.9988
+--- Оптимизация гиперпараметров завершена ---
+Добавление моделей в тренер...
+Обучение моделей...
+Обучение модели: logistic_regression
+Обучение модели: random_forest
+Обучение модели: gradient_boosting
+Обучение модели: xgboost
+Обучение модели: lightgbm
+Обучение модели: svm
+Оценка моделей...
+Оценка модели: logistic_regression
+Оценка модели: random_forest
+Оценка модели: gradient_boosting
+Оценка модели: xgboost
+Оценка модели: lightgbm
+Оценка модели: svm
+Сохранение обученных моделей и метрик в ../output\models\trained_models_bundle.pkl...
+Модели и метрики сохранены.
+Создание сравнительных визуализаций...
+Визуализация важности признаков...
+График важности признаков для random_forest сохранен в ../output\results\plots\feature_importance_random_forest_20250510_002021.p
+График важности признаков для random_forest сохранен в ../output\results\plots\feature_importance_random_forest_20250510_002021.png
+График важности признаков для xgboost сохранен в ../output\results\plots\feature_importance_xgboost_20250510_002021.png
+График важности признаков для lightgbm сохранен в ../output\results\plots\feature_importance_lightgbm_20250510_002023.png
+
+Лучшая модель по F1-macro: lightgbm
+Метрики лучшей модели:
+  - accuracy: 0.9992
+  - precision_macro: 0.9991
+  - recall_macro: 0.9991
+  - f1_macro: 0.9991
+  - classification_report: (dict with keys: 0, 1, 2, 3, accuracy, macro avg, weighted avg)
+  - confusion_matrix: (list of length 4)
+  - y_pred: (list of length 18297)
+  - y_proba: (list of length 18297)
+Лучшая модель сохранена в ../output\models\best_model.pkl
+
+Выполнение завершено в 2025-05-10 00:20:23
+Общее время выполнения: 0:50:36.374120
+
+Результаты сохранены в директории:
+  - ../output

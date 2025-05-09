@@ -29,6 +29,16 @@ from preprocessing.enhanced_loyalty_features import (
 )
 from modeling.model_training import ModelTrainer
 from modeling.model_evaluation import ModelEvaluator
+# Импорты для оптимизации и моделей
+from modeling.optimization.model_optimization import (
+    optimize_hyperparameters,
+    rf_param_distributions,
+    xgb_param_distributions,
+    lgbm_param_distributions
+)
+from sklearn.ensemble import RandomForestClassifier
+from xgboost import XGBClassifier
+from lightgbm import LGBMClassifier
 
 
 def parse_args():
@@ -62,6 +72,11 @@ def parse_args():
                        help='Сохранять промежуточные результаты')
     parser.add_argument('--skip_model_training', action='store_true',
                        help='Пропустить этап обучения моделей (использовать сохраненные)')
+    # Аргументы для Optuna
+    parser.add_argument('--n_opt_trials', type=int, default=50,
+                        help='Количество испытаний Optuna для оптимизации гиперпараметров')
+    parser.add_argument('--cv_opt_folds', type=int, default=3,
+                        help='Количество фолдов кросс-валидации при оптимизации Optuna')
     
     return parser.parse_args()
 
@@ -166,7 +181,8 @@ def create_loyalty_features_step(base_df, output_dir, save_intermediate=False):
 
 
 def train_models_step(data_dict, output_dir, tune_hyperparams=False, create_ensemble=False,
-                     balance_classes=False, random_state=42, skip_model_training=False, save_intermediate=False):
+                     balance_classes=False, random_state=42, skip_model_training=False, 
+                     save_intermediate=False, n_opt_trials=50, cv_opt_folds=3):
     """
     Выполнение шага обучения моделей.
     
@@ -179,6 +195,8 @@ def train_models_step(data_dict, output_dir, tune_hyperparams=False, create_ense
         random_state (int): Seed для генератора случайных чисел.
         skip_model_training (bool): Пропускать ли обучение моделей.
         save_intermediate (bool): Сохранять ли промежуточные модели и метрики.
+        n_opt_trials (int): Количество испытаний Optuna для оптимизации.
+        cv_opt_folds (int): Количество фолдов для кросс-валидации при оптимизации.
         
     Returns:
         tuple: (ModelTrainer, ModelEvaluator) - объекты для обучения и оценки моделей.
@@ -215,11 +233,64 @@ def train_models_step(data_dict, output_dir, tune_hyperparams=False, create_ense
     class_mapping = {i: name for i, name in enumerate(class_names)} if class_names else {i: str(i) for i in range(len(np.unique(y_train)))}
     
     print(f"Распределение классов (обучающая выборка):")
-    unique_classes = np.unique(y_train)
-    for class_idx in sorted(unique_classes):
+    unique_classes_train = np.unique(y_train)
+    for class_idx in sorted(unique_classes_train):
         count = np.sum(y_train == class_idx)
         class_name = class_mapping.get(class_idx, f"Класс {class_idx}")
         print(f"  - {class_name}: {count} ({count/len(y_train):.2%})")
+    
+    # --- Оптимизация гиперпараметров (если включена) ---
+    optimized_params_for_trainer = {}
+    if tune_hyperparams and not skip_model_training:
+        print("\n--- Запуск оптимизации гиперпараметров ---")
+        
+        # Модели для оптимизации и их конфигурации
+        models_to_optimize = {
+            "random_forest": {
+                "model_fn": lambda **params: RandomForestClassifier(**params, random_state=random_state),
+                "param_distributions": rf_param_distributions,
+                "default_params": {'random_state': random_state} # Для передачи в model_fn
+            },
+            "xgboost": {
+                "model_fn": lambda **params: XGBClassifier(**params, random_state=random_state, use_label_encoder=False, eval_metric='mlogloss'),
+                "param_distributions": xgb_param_distributions,
+                "default_params": {'random_state': random_state, 'use_label_encoder': False, 'eval_metric': 'mlogloss'}
+            },
+            "lightgbm": {
+                "model_fn": lambda **params: LGBMClassifier(**params, random_state=random_state, verbosity=-1),
+                "param_distributions": lgbm_param_distributions,
+                "default_params": {'random_state': random_state, 'verbosity': -1}
+            }
+        }
+
+        for model_name, config in models_to_optimize.items():
+            print(f"\nОптимизация для {model_name}...")
+            try:
+                # Передача random_state в param_distributions, если он там используется
+                # Например, rf_param_distributions может принимать use_class_weight, но не random_state напрямую
+                # Это просто пример, как можно было бы передать дополнительные аргументы в param_distributions, если нужно
+                # В текущей реализации model_optimization.py они не используются.
+                current_param_distributions = lambda trial: config["param_distributions"](trial)
+                if model_name == "random_forest": # rf_param_distributions принимает use_class_weight
+                    current_param_distributions = lambda trial: config["param_distributions"](trial, use_class_weight=balance_classes)
+
+                best_params, best_score = optimize_hyperparameters(
+                    model_fn=config["model_fn"],
+                    X_train=pd.DataFrame(X_train, columns=feature_names),
+                    y_train=pd.Series(y_train),
+                    param_distributions=current_param_distributions,
+                    n_trials=n_opt_trials, 
+                    cv_folds=cv_opt_folds,
+                    scoring_metric="f1_macro", # Или другая метрика
+                    random_state=random_state
+                )
+                optimized_params_for_trainer[model_name] = best_params
+                print(f"Оптимизация для {model_name} завершена. Лучший F1 (macro): {best_score:.4f}")
+            except Exception as e:
+                print(f"Ошибка при оптимизации {model_name}: {e}")
+                # В случае ошибки, модель будет использовать параметры по умолчанию
+        
+        print("--- Оптимизация гиперпараметров завершена ---")
     
     # Создание объекта для обучения моделей
     trainer = ModelTrainer(models_dir=models_dir, results_dir=results_dir)
@@ -242,49 +313,33 @@ def train_models_step(data_dict, output_dir, tune_hyperparams=False, create_ense
         # Определение весов классов для учета несбалансированности
         if balance_classes:
             print("Применение весов классов для учета несбалансированности...")
-            class_counts = np.bincount(y_train)
-            class_weights = {i: len(y_train) / (len(unique_classes) * count) 
-                             for i, count in enumerate(class_counts)}
-        else:
-            class_weights = None
-        
-        # Добавление базовых моделей
-        print("Добавление базовых моделей...")
-        trainer.add_base_models(class_weights=class_weights)
-        
-        # Обучение всех моделей
-        print("Обучение моделей...")
-        trainer.train_all_models(X_train, y_train)
-        
-        # Настройка гиперпараметров (если требуется)
-        if tune_hyperparams:
-            print("Настройка гиперпараметров...")
-            best_models = trainer.tune_all_models(
-                X_train, y_train, 
-                cv=5, 
-                method='random', 
-                n_iter=20
-            )
-            for name, model in best_models.items():
-                trainer.models[name] = model
-        
-        # Создание ансамблевых моделей (если требуется)
-        if create_ensemble:
-            print("Создание ансамблевых моделей...")
-            models_for_ensemble = [(name, model) for name, model in trainer.models.items() 
-                                  if name not in ['voting_ensemble', 'stacking_ensemble']]
+            class_counts = np.bincount(y_train.astype(int)) # Убедимся что y_train - int
+            num_classes = len(unique_classes_train) # Используем ранее посчитанное кол-во классов
             
-            if len(models_for_ensemble) > 1:
-                print("Создание ансамбля голосования...")
-                trainer.create_voting_ensemble(estimators=models_for_ensemble, voting='soft')
-                trainer.train_model('voting_ensemble', X_train, y_train)
-                
-                print("Создание стекинг-ансамбля...")
-                trainer.create_stacking_ensemble(estimators=models_for_ensemble)
-                trainer.train_model('stacking_ensemble', X_train, y_train)
+            class_weights_calculated = {i: len(y_train) / (num_classes * count) 
+                                     for i, count in enumerate(class_counts) if count > 0}
+            
+            # Для передачи в конструкторы моделей sklearn (где это применимо)
+            class_weights_sklearn = class_weights_calculated if balance_classes else None
+            # Для передачи в sample_weight в .fit() (для моделей, которые не берут class_weight в init)
+            class_weights_for_sample_weight = class_weights_calculated if balance_classes else None
+        else:
+            class_weights_sklearn = None
+            class_weights_for_sample_weight = None
+
+        # Добавление базовых моделей с учетом оптимизированных параметров
+        print("Добавление моделей в тренер...")
+        trainer.add_base_models(
+            class_weights=class_weights_sklearn, 
+            model_custom_params=optimized_params_for_trainer
+        )
         
-        # Оценка всех моделей на тестовой выборке
-        print("Оценка моделей на тестовой выборке...")
+        # Обучение моделей
+        print("Обучение моделей...")
+        trainer.train_all_models(X_train, y_train, class_weights_dict=class_weights_for_sample_weight)
+        
+        # Оценка моделей
+        print("Оценка моделей...")
         all_metrics = evaluator.evaluate_models(
             X_test, y_test, class_names=class_names
         )
@@ -417,7 +472,9 @@ def main():
             balance_classes=args.balance_classes,
             random_state=args.random_state,
             skip_model_training=args.skip_model_training,
-            save_intermediate=args.save_intermediate
+            save_intermediate=args.save_intermediate,
+            n_opt_trials=getattr(args, 'n_opt_trials', 50), # Значение по умолчанию, если не задано
+            cv_opt_folds=getattr(args, 'cv_opt_folds', 3)   # Значение по умолчанию, если не задано
         )
     except Exception as e:
         print(f"Ошибка при обучении моделей: {e}")

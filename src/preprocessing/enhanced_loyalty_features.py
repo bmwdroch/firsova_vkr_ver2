@@ -824,14 +824,14 @@ def balance_loyalty_classes(df, target_column, method='random_over', sampling_st
     
     return resampled_df
 
-def evaluate_feature_importance(df, target_column='loyalty_target', methods=None, n_estimators=100, 
+def evaluate_feature_importance(X_features, y_target, methods=None, n_estimators=100, 
                               n_repeats=10, n_top_features=20, random_state=42, output_dir=None):
     """
     Оценивает информативность признаков с использованием различных методов
     
     Аргументы:
-        df (pandas.DataFrame): Датасет с признаками и целевой переменной
-        target_column (str): Имя столбца с целевой переменной
+        X_features (pandas.DataFrame): Датафрейм с признаками (только признаки)
+        y_target (pandas.Series): Серия с целевой переменной
         methods (list): Список методов для оценки важности признаков
                       ('correlation', 'model_based', 'permutation', 'shap')
         n_estimators (int): Количество деревьев для Random Forest
@@ -845,9 +845,9 @@ def evaluate_feature_importance(df, target_column='loyalty_target', methods=None
     """
     print("Оценка информативности признаков...")
     
-    # Проверка наличия целевой переменной
-    if target_column not in df.columns:
-        print(f"Ошибка: столбец {target_column} не найден в датасете")
+    # Проверка наличия целевой переменной - теперь y_target это Series, проверка на None или пустоту
+    if y_target is None or y_target.empty:
+        print(f"Ошибка: целевая переменная (y_target) не предоставлена или пуста")
         return None
     
     # Определение методов по умолчанию
@@ -860,24 +860,20 @@ def evaluate_feature_importance(df, target_column='loyalty_target', methods=None
     all_importances = pd.DataFrame()
     
     # Подготовка данных
-    X = df.select_dtypes(include=['int64', 'float64'])
+    # X теперь это X_features, y это y_target
+    X = X_features.copy() 
+    y = y_target.copy()
     
-    # Исключаем целевую переменную и служебные столбцы
-    exclude_cols = [target_column, 'Клиент', 'original_index', 'is_synthetic']
-    exclude_cols.extend([col for col in X.columns if col.endswith('_target')])
+    # Исключаем целевую переменную и служебные столбцы - УЖЕ СДЕЛАНО ПРИ СОЗДАНИИ X_features
+    # exclude_cols = [target_column, 'Клиент', 'original_index', 'is_synthetic']
+    # exclude_cols.extend([col for col in X.columns if col.endswith('_target')])
     
-    features = [col for col in X.columns if col not in exclude_cols]
+    features = X.columns.tolist() # Получаем имена признаков из X_features
     
     # Проверка наличия признаков
     if not features:
         print("Ошибка: не найдены числовые признаки для анализа")
         return None
-    
-    X = X[features]
-    y = df[target_column]
-    
-    # Заполнение пропущенных значений
-    X.fillna(X.mean(), inplace=True)
     
     # 1. Корреляционный анализ
     if 'correlation' in methods:
@@ -887,10 +883,11 @@ def evaluate_feature_importance(df, target_column='loyalty_target', methods=None
         corr_importances['feature'] = features
         
         # Абсолютные значения корреляции Пирсона
-        if df[target_column].dtype in ['int64', 'float64']:
+        # if df[target_column].dtype in ['int64', 'float64']: # Теперь y это Series
+        if y.dtype in ['int64', 'float64']:
             corrs = []
-            for feature in features:
-                corr = abs(df[feature].corr(df[target_column]))
+            for feature_name in features: # Используем feature_name для итерации, чтобы не конфликтовать с features list
+                corr = abs(X[feature_name].corr(y)) # X[feature_name] вместо df[feature]
                 corrs.append(corr)
             corr_importances['pearson_corr'] = corrs
         
@@ -1021,13 +1018,20 @@ def evaluate_feature_importance(df, target_column='loyalty_target', methods=None
             else:
                 mean_abs_shap = np.abs(shap_values).mean(axis=0)
             
+            print(f"DEBUG SHAP: shape of mean_abs_shap: {mean_abs_shap.shape if isinstance(mean_abs_shap, np.ndarray) else type(mean_abs_shap)}")
+            print(f"DEBUG SHAP: length of features list: {len(features)}")
+
             # Создаем датафрейм с результатами
             shap_importances = pd.DataFrame()
             shap_importances['feature'] = features
             shap_importances['shap_importance'] = mean_abs_shap
             
             # Нормализация оценок важности
-            shap_importances['shap_importance_norm'] = shap_importances['shap_importance'] / shap_importances['shap_importance'].max()
+            max_shap_val = shap_importances['shap_importance'].max()
+            if max_shap_val > 0:
+                shap_importances['shap_importance_norm'] = shap_importances['shap_importance'] / max_shap_val
+            else:
+                shap_importances['shap_importance_norm'] = 0.0 # если все значения 0 или отрицательные (хотя abs)
             
             # Сортировка по важности
             shap_importances = shap_importances.sort_values('shap_importance', ascending=False).reset_index(drop=True)
@@ -1152,12 +1156,12 @@ def evaluate_feature_importance(df, target_column='loyalty_target', methods=None
     
     return all_importances
 
-def select_important_features(df, importance_df, min_importance=0.05, max_features=30, method='score'):
+def select_important_features(df_with_features, importance_df, min_importance=0.05, max_features=30, method='score'):
     """
     Выбирает наиболее информативные признаки на основе результатов оценки информативности
     
     Аргументы:
-        df (pandas.DataFrame): Исходный датасет
+        df_with_features (pandas.DataFrame): Исходный датасет (или датафрейм, содержащий как минимум колонки из importance_df['feature'])
         importance_df (pandas.DataFrame): Датафрейм с оценками важности признаков
         min_importance (float): Минимальный порог важности для выбора признака
         max_features (int): Максимальное количество признаков для выбора
@@ -1203,7 +1207,7 @@ def select_important_features(df, importance_df, min_importance=0.05, max_featur
     important_features = important_features.head(max_features)
     
     # Проверка наличия признаков в исходном датасете
-    selected_features = [f for f in important_features['feature'].tolist() if f in df.columns]
+    selected_features = [f for f in important_features['feature'].tolist() if f in df_with_features.columns]
     
     print(f"Отобрано {len(selected_features)} признаков по важности")
     
@@ -1412,88 +1416,142 @@ def prepare_final_loyalty_dataset(df, balance_categories=True, balance_method='b
     if feature_selection:
         print("Оценка информативности признаков...")
         
-        # Определяем целевую переменную для анализа
-        if 'balanced_target' in final_df.columns:
-            target_col = 'balanced_target'
+        # Определяем признаки, которые нужно исключить перед оценкой важности и обучением
+        # Это идентификаторы, прямые производные целевой переменной или сильно скоррелированные с ней
+        features_to_exclude_from_analysis = [
+            'Клиент',  # ID клиента
+            'enhanced_loyalty_score', # Прямой источник для enhanced_loyalty_score_category -> loyalty_target
+            'rfm_segment', # Категориальный RFM, может сильно коррелировать или дублировать
+            'cluster_segment', # Категориальный кластер, аналогично
+            'RFM_Score', # RFM счет, если category_column из него сделана
+            'R', 'F', 'M', # Базовые компоненты RFM, если они напрямую участвуют в целевой
+            'weighted_RFM', # Взвешенный RFM
+            'rfm_normalized', # Нормализованный RFM
+            category_column, # Сам исходный категориальный столбец лояльности
+            'loyalty_target' # Целевая переменная, которую мы пытаемся предсказать
+        ]
+        
+        # Убираем дубликаты и те колонки, которых может не быть в final_df
+        features_to_exclude_from_analysis = list(set(col for col in features_to_exclude_from_analysis if col in final_df.columns))
+
+        # Создаем датафрейм X_for_importance, исключая целевую и "запрещенные" признаки
+        X_for_importance = final_df.drop(columns=features_to_exclude_from_analysis, errors='ignore')
+        y_for_importance = final_df['loyalty_target'] # Используем финальную целевую переменную
+        
+        # Убедимся, что X_for_importance содержит только числовые типы данных
+        X_for_importance = X_for_importance.select_dtypes(include=np.number)
+
+        # Проверка, что X_for_importance не пуст и содержит признаки
+        if X_for_importance.empty or X_for_importance.shape[1] == 0:
+            print("Ошибка: после исключения колонок не осталось признаков для оценки важности.")
+            # В этом случае можно вернуть все доступные признаки, кроме целевой
+            X = final_df.drop(columns=features_to_exclude_from_analysis, errors='ignore').copy()
+            # y = final_df['loyalty_target'].copy() # y уже есть как y_for_importance
+            if 'loyalty_target' in X.columns: # Дополнительная проверка
+                 X = X.drop(columns=['loyalty_target'], errors='ignore')
+            top_features = list(X.columns)
+            importance_df = None # Если нет признаков для оценки, importance_df не будет создан
         else:
-            target_col = 'loyalty_target'
-        
-        # Выполняем оценку информативности признаков
-        importance_results = evaluate_feature_importance(
-            final_df, 
-            target_column=target_col,
-            methods=None,  # Использовать все доступные методы
-            output_dir=output_dir,
-            random_state=random_state
-        )
-        
-        # Выбираем наиболее информативные признаки
-        if importance_results is not None:
-            selected_features = select_important_features(
-                final_df,
-                importance_results,
-                min_importance=min_importance,
-                max_features=max_features
+            importance_df = evaluate_feature_importance(
+                X_features=X_for_importance, 
+                y_target=y_for_importance, 
+                methods=['correlation', 'mutual_info', 'rf_importance', 'permutation', 'shap'], # 'mutual_info' - было в коде, восстановил
+                n_top_features=max_features, 
+                random_state=random_state,
+                output_dir=os.path.join(output_dir, 'feature_importance') if output_dir else None
             )
             
-            # Добавляем служебные столбцы и целевую переменную
-            selected_columns = selected_features.copy()
+            # Отбор признаков на основе их важности
+            # select_important_features теперь ожидает df_with_features, importance_df
+            # df_with_features может быть X_for_importance, т.к. он содержит все фичи, из которых выбираем
+            top_features = select_important_features( # Изменил распаковку, т.к. функция возвращает только список
+                df_with_features=X_for_importance, 
+                importance_df=importance_df, 
+                min_importance=min_importance, 
+                max_features=max_features
+            )
+            if top_features is None: # Если select_important_features вернул None (например, importance_df был None)
+                print("Не удалось отобрать признаки, используем все доступные из X_for_importance.")
+                top_features = X_for_importance.columns.tolist()
+
             
-            # Добавляем ID клиента
-            if 'Клиент' in final_df.columns:
-                selected_columns.append('Клиент')
+            # Формируем X и y на основе отобранных признаков
+            if top_features: # Убедимся, что top_features не пуст
+                X = final_df[top_features].copy() 
+            else: # Если top_features пуст, но X_for_importance не был, берем все из X_for_importance
+                X = X_for_importance.copy()
+                top_features = X.columns.tolist()
+
+            y = final_df['loyalty_target'].copy()
             
-            # Добавляем целевую переменную
-            if 'balanced_target' in final_df.columns:
-                selected_columns.append('balanced_target')
-            selected_columns.append('loyalty_target')
-            
-            # Добавляем категории лояльности
-            if 'enhanced_loyalty_score_category' in final_df.columns:
-                selected_columns.append('enhanced_loyalty_score_category')
-            if 'balanced_category' in final_df.columns:
-                selected_columns.append('balanced_category')
-                
-            # Добавляем исходную метрику лояльности
-            if 'enhanced_loyalty_score' in final_df.columns:
-                selected_columns.append('enhanced_loyalty_score')
-            
-            # Создаем финальный датасет с отобранными признаками
-            feature_selected_df = final_df[selected_columns].copy()
-            
-            print(f"Создан датасет с {len(selected_features)} информативными признаками")
-        else:
-            print("Не удалось выполнить отбор признаков. Используем все признаки.")
-            feature_selected_df = final_df
+            # ЕЩЕ РАЗ УБЕДИМСЯ, что никакие из запрещенных признаков не попали в X случайно
+            # Это должно быть не нужно, если top_features корректно отобраны из X_for_importance
+            final_X_cols_to_drop = [col for col in features_to_exclude_from_analysis if col in X.columns and col != 'loyalty_target']
+            if final_X_cols_to_drop:
+                X.drop(columns=final_X_cols_to_drop, inplace=True)
+                print(f"Дополнительно удалены из X: {final_X_cols_to_drop}")
+                top_features = list(X.columns) # Обновляем top_features
+
     else:
-        print("Отбор признаков отключен. Используем все признаки.")
-        feature_selected_df = final_df
-    
-    # Разделение на обучающую и тестовую выборки
+        # Если отбор признаков не выполняется, берем все, кроме целевой и запрещенных
+        features_to_exclude = [
+            'Клиент', category_column, 'loyalty_target', 'enhanced_loyalty_score',
+            'rfm_segment', 'cluster_segment', 'RFM_Score', 'R', 'F', 'M',
+            'weighted_RFM', 'rfm_normalized'
+        ]
+        features_to_exclude = list(set(col for col in features_to_exclude if col in final_df.columns))
+        
+        X = final_df.drop(columns=features_to_exclude, errors='ignore').copy()
+        y = final_df['loyalty_target'].copy()
+        top_features = list(X.columns)
+        print(f"Отбор признаков не производился. Используется {len(top_features)} признаков.")
+
+    print(f"Итоговое количество признаков для моделирования: {X.shape[1]}")
+    if X.shape[1] < 5 and feature_selection:
+        print(f"ПРЕДУПРЕЖДЕНИЕ: отобрано очень мало признаков ({X.shape[1]}). Проверьте пороги отбора.")
+    print(f"Признаки, используемые для обучения: {list(X.columns)}")
+
+    # Разделение данных на обучающую и тестовую выборки
     print(f"Разделение на обучающую и тестовую выборки (тест: {train_test_split_ratio*100}%)...")
     
-    # Определяем целевую переменную для разделения
-    if 'balanced_target' in feature_selected_df.columns:
-        target_col = 'balanced_target'
+    # Определяем, какую целевую переменную использовать для стратификации
+    # и как она будет называться в сохраненных файлах и метаданных.
+    # y_for_split - это Series, который будет разделен на y_train и y_test.
+    # target_column_name - имя этой целевой переменной.
+    
+    # y у нас уже определен выше как final_df['loyalty_target'].copy()
+    # X также определен выше и содержит финальный набор признаков.
+    
+    if 'balanced_target' in final_df.columns and balance_categories and balance_method != 'none':
+        # Если была балансировка, которая создала 'balanced_target', и она не была отключена,
+        # и эта колонка действительно существует в final_df.
+        y_to_stratify_and_learn = final_df['balanced_target'].copy()
+        target_column_for_split_and_output = 'balanced_target'
+        print(f"Целевая переменная для обучения и стратификации: {target_column_for_split_and_output}")
     else:
-        target_col = 'loyalty_target'
+        y_to_stratify_and_learn = y.copy() # y это final_df['loyalty_target'].copy()
+        target_column_for_split_and_output = 'loyalty_target'
+        print(f"Целевая переменная для обучения и стратификации: {target_column_for_split_and_output}")
+
+    # Разделяем X (который уже готов) и y_to_stratify_and_learn
+    # Важно: если X был результатом сэмплинга, то y_to_stratify_and_learn должен соответствовать ему.
+    # На данный момент логика балансировки (если sampling) возвращает новый X и y.
+    # Если балансировка была 'boundary', то X и y остаются оригинальными срезами из final_df.
+    # Это нужно учесть: если X и y пришли из balance_loyalty_classes, они уже сбалансированы.
+    # В таком случае y_to_stratify_and_learn должен быть этим новым y из сэмплинга.
     
-    # Выделяем признаки и целевую переменную
-    X = feature_selected_df.drop(['Клиент', target_col, 'enhanced_loyalty_score_category'], axis=1, errors='ignore')
-    y = feature_selected_df[target_col]
-    
-    # Удаляем дополнительные столбцы, не являющиеся признаками
-    for col in ['original_index', 'is_synthetic', 'balanced_category']:
-        if col in X.columns:
-            X = X.drop(col, axis=1)
-    
-    # Удаляем все столбцы, содержащие '_target' кроме нашей целевой переменной
-    target_cols = [col for col in X.columns if col.endswith('_target')]
-    X = X.drop(target_cols, axis=1, errors='ignore')
-    
-    # Разделяем данные
+    # ПРОВЕРКА: Если X и y были изменены функцией balance_loyalty_classes (методом sampling/combine),
+    # то y_to_stratify_and_learn должен быть этим новым y. 
+    # На данный момент X и y формируются до блока балансировки классов, а потом если sampling, то X и y могут быть переопределены
+    # Этот участок кода выполняется ПОСЛЕ блока балансировки.
+    # Если final_df был заменен на balanced_df, то X и y, созданные из него, уже сбалансированы.
+    # Однако, если использовался метод 'sampling' в balance_categories, то `final_df` перезаписывался:
+    # `final_df = balanced_df.copy()` где balanced_df результат balance_loyalty_classes.
+    # Тогда X и y, которые создавались ВЫШЕ из final_df, уже будут из сбалансированных данных.
+    # В таком случае, y_to_stratify_and_learn, взятый из этого final_df, тоже будет сбалансированным.
+
     X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=train_test_split_ratio, random_state=random_state, stratify=y
+        X, y_to_stratify_and_learn, test_size=train_test_split_ratio, random_state=random_state, stratify=y_to_stratify_and_learn
     )
     
     print(f"Размер обучающей выборки: {len(X_train)} примеров")
@@ -1518,25 +1576,25 @@ def prepare_final_loyalty_dataset(df, balance_categories=True, balance_method='b
         if not os.path.exists(model_dir):
             os.makedirs(model_dir)
         
-        # Сохраняем полный датасет
-        final_dataset_path = os.path.join(output_dir, 'final_loyalty_dataset.csv')
-        feature_selected_df.to_csv(final_dataset_path, index=False)
-        print(f"Итоговый датасет сохранен в {final_dataset_path}")
+        # Сохраняем данные, которые пошли в обучение
+        # Это X_train, y_train, X_test, y_test
+        # Имя целевого столбца берем из target_column_for_split_and_output
         
-        # Сохраняем обучающую и тестовую выборки
         X_train.to_csv(os.path.join(model_dir, 'X_train.csv'), index=False)
         X_test.to_csv(os.path.join(model_dir, 'X_test.csv'), index=False)
-        y_train.to_csv(os.path.join(model_dir, 'y_train.csv'), index=False)
-        y_test.to_csv(os.path.join(model_dir, 'y_test.csv'), index=False)
+        y_train.to_csv(os.path.join(model_dir, 'y_train.csv'), index=False, header=[target_column_for_split_and_output])
+        y_test.to_csv(os.path.join(model_dir, 'y_test.csv'), index=False, header=[target_column_for_split_and_output])
         
+        print(f"Обучающие и тестовые данные сохранены в {model_dir}")
+
         # Сохраняем метаданные
         metadata = {
-            'feature_count': len(X.columns),
-            'feature_list': X.columns.tolist(),
-            'target_column': target_col,
+            'feature_count': X.shape[1],
+            'feature_list': list(X.columns),
+            'target_column': target_column_for_split_and_output, # Это правильная переменная
             'train_size': len(X_train),
             'test_size': len(X_test),
-            'class_distribution': y.value_counts().to_dict(),
+            'class_distribution': y_to_stratify_and_learn.value_counts().to_dict(), # Используем y_to_stratify_and_learn
             'train_distribution': y_train.value_counts().to_dict(),
             'test_distribution': y_test.value_counts().to_dict(),
             'balance_method': balance_method if balance_categories else 'none',
@@ -1555,12 +1613,12 @@ def prepare_final_loyalty_dataset(df, balance_categories=True, balance_method='b
     
     # Вывод информации о готовом датасете
     print(f"Подготовка итогового датасета завершена.")
-    print(f"Количество признаков: {len(X.columns)}")
-    print(f"Размер датасета: {len(feature_selected_df)} примеров")
+    print(f"Количество признаков: {X.shape[1]}")
+    print(f"Размер датасета (X) перед train/test split: {len(X)} примеров") # Изменено для ясности
     
     # Получение фактических имен классов из данных
-    if 'enhanced_loyalty_score_category' in feature_selected_df.columns:
-        class_names = feature_selected_df['enhanced_loyalty_score_category'].unique().tolist()
+    if 'enhanced_loyalty_score_category' in final_df.columns:
+        class_names = final_df['enhanced_loyalty_score_category'].unique().tolist()
         class_names.sort()  # Сортируем для стабильного порядка
     else:
         # Используем стандартные имена классов как запасной вариант
@@ -1568,13 +1626,13 @@ def prepare_final_loyalty_dataset(df, balance_categories=True, balance_method='b
     
     # Возвращаем словарь с данными и метаданными
     result = {
-        'full_dataset': feature_selected_df,
+        'full_dataset': final_df,
         'X_train': X_train,
         'X_test': X_test,
         'y_train': y_train,
         'y_test': y_test,
         'features': X.columns.tolist(),
-        'target_column': target_col,
+        'target_column': target_column_for_split_and_output,
         'class_names': class_names
     }
     
