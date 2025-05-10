@@ -1,0 +1,54 @@
+{# src/templates/partials/classification_result_display.html #}
+
+{% if error %}
+    <div class="message error-message">
+        <p><strong>Ошибка:</strong> {{ error }}</p>
+    </div>
+{% endif %}
+
+{% if info_message %}
+    <div class="message info-message">
+        <p><strong>Информация:</strong> {{ info_message }}</p>
+    </div>
+{% endif %}
+
+{% if input_method %}
+    <p><strong>Источник данных:</strong> {{ input_method }}</p>
+{% endif %}
+
+{% if results %}
+    <h4>Результаты классификации:</h4>
+    {% if results is iterable and results is not string and results | length > 0 %}
+        <table class="results-table">
+            <thead>
+                <tr>
+                    <th>ID Клиента</th>
+                    <th>ID Сегмента</th>
+                    <th>Название Сегмента</th>
+                    <th>Вероятности по Классам</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in results %}
+                    <tr>
+                        <td>{{ row.client_id }}</td>
+                        <td>{{ row.predicted_segment_id }}</td>
+                        <td>{{ row.predicted_segment_name }}</td>
+                        <td>
+                            <ul>
+                            {% for class_name, proba in row.probabilities.items() %}
+                                <li>{{ class_name }}: {{ "%.4f" | format(proba) }}</li>
+                            {% endfor %}
+                            </ul>
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p>Для указанных данных не удалось получить результат классификации или результат пуст. Проверьте входные данные и сообщения об ошибках/информацию выше.</p>
+    {% endif %}
+{% elif not error and not info_message %}
+    {# Это сообщение будет показано, если нет ни результатов, ни ошибок, ни инфо-сообщений (например, при первой загрузке блока) #}
+    <p>Результаты обработки будут отображены здесь.</p>
+{% endif %} 

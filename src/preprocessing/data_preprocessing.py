@@ -4,6 +4,10 @@ from sklearn.preprocessing import StandardScaler, MinMaxScaler, OneHotEncoder, L
 from scipy import stats
 import os
 import argparse
+import joblib # Добавлено для сохранения трансформеров
+
+# Директория для сохранения трансформеров внутри output_dir
+TRANSFORMERS_SUBDIR = "models/transformers"
 
 def preprocess_data(df, output_dir=None):
     """
@@ -11,7 +15,7 @@ def preprocess_data(df, output_dir=None):
     
     Аргументы:
         df (pandas.DataFrame): Исходный датасет
-        output_dir (str, optional): Директория для сохранения графиков и отчетов
+        output_dir (str, optional): Директория для сохранения графиков, отчетов и трансформеров
         
     Возвращает:
         pandas.DataFrame: Предобработанный датасет
@@ -22,6 +26,13 @@ def preprocess_data(df, output_dir=None):
     
     print("Начало предобработки данных")
     
+    # Создание директории для трансформеров, если output_dir указан
+    transformers_path = None
+    if output_dir:
+        transformers_path = os.path.join(output_dir, TRANSFORMERS_SUBDIR)
+        os.makedirs(transformers_path, exist_ok=True)
+        print(f"Трансформеры будут сохранены в: {transformers_path}")
+
     # Шаг 1: Обработка пропущенных значений
     df = handle_missing_values(df)
     
@@ -29,10 +40,10 @@ def preprocess_data(df, output_dir=None):
     df = handle_outliers(df)
     
     # Шаг 3: Нормализация числовых признаков
-    df = normalize_numeric_features(df)
+    df = normalize_numeric_features(df, transformers_path) # Передаем путь для сохранения
     
     # Шаг 4: Кодирование категориальных переменных
-    df = encode_categorical_features(df)
+    df = encode_categorical_features(df, transformers_path) # Передаем путь для сохранения
     
     # Шаг 5: Создание агрегированных данных на уровне клиента
     customer_df = create_aggregated_features(df)
@@ -41,7 +52,7 @@ def preprocess_data(df, output_dir=None):
     final_df = prepare_final_dataset(customer_df)
     
     # Сохранение предобработанных данных
-    if output_dir and not os.path.exists(output_dir):
+    if output_dir and not os.path.exists(output_dir): # Эта проверка дублируется, но пусть будет
         os.makedirs(output_dir)
     
     if output_dir:
@@ -181,12 +192,13 @@ def handle_outliers(df):
     
     return df_clean
 
-def normalize_numeric_features(df):
+def normalize_numeric_features(df, transformers_path=None):
     """
     Нормализация/стандартизация числовых признаков
     
     Аргументы:
         df (pandas.DataFrame): Исходный датасет
+        transformers_path (str, optional): Путь для сохранения трансформеров
         
     Возвращает:
         pandas.DataFrame: Датасет с нормализованными числовыми признаками
@@ -208,24 +220,31 @@ def normalize_numeric_features(df):
     
     # Для денежных переменных применяем MinMaxScaler (масштабирование к диапазону [0, 1])
     if monetary_vars:
-        scaler = MinMaxScaler()
-        df_clean[monetary_vars] = scaler.fit_transform(df_clean[monetary_vars])
+        scaler_monetary = MinMaxScaler()
+        df_clean[monetary_vars] = scaler_monetary.fit_transform(df_clean[monetary_vars])
         print(f"Применено масштабирование к диапазону [0, 1] для переменных: {', '.join(monetary_vars)}")
+        if transformers_path:
+            joblib.dump(scaler_monetary, os.path.join(transformers_path, 'monetary_vars_scaler.pkl'))
+            print(f"MinMaxScaler для monetary_vars сохранен в {transformers_path}")
     
     # Для частотных переменных применяем StandardScaler (стандартизация)
     if frequency_vars:
-        scaler = StandardScaler()
-        df_clean[frequency_vars] = scaler.fit_transform(df_clean[frequency_vars])
+        scaler_frequency = StandardScaler()
+        df_clean[frequency_vars] = scaler_frequency.fit_transform(df_clean[frequency_vars])
         print(f"Применена стандартизация для переменных: {', '.join(frequency_vars)}")
+        if transformers_path:
+            joblib.dump(scaler_frequency, os.path.join(transformers_path, 'frequency_vars_scaler.pkl'))
+            print(f"StandardScaler для frequency_vars сохранен в {transformers_path}")
     
     return df_clean
 
-def encode_categorical_features(df):
+def encode_categorical_features(df, transformers_path=None):
     """
     Преобразование категориальных переменных
     
     Аргументы:
         df (pandas.DataFrame): Исходный датасет
+        transformers_path (str, optional): Путь для сохранения трансформеров
         
     Возвращает:
         pandas.DataFrame: Датасет с преобразованными категориальными переменными
@@ -237,11 +256,16 @@ def encode_categorical_features(df):
     
     # Пол: label encoding (0/1)
     if 'Пол' in df_clean.columns:
-        le = LabelEncoder()
-        df_clean['Пол_encoded'] = le.fit_transform(df_clean['Пол'])
-        # Сохраняем маппинг для интерпретации
-        gender_mapping = dict(zip(le.classes_, le.transform(le.classes_)))
+        le_gender = LabelEncoder()
+        df_clean['Пол_encoded'] = le_gender.fit_transform(df_clean['Пол'])
+        # Сохраняем маппинг для интерпретации и сам энкодер
+        gender_mapping = dict(zip(le_gender.classes_, le_gender.transform(le_gender.classes_)))
         print(f"Кодирование переменной 'Пол': {gender_mapping}")
+        if transformers_path:
+            joblib.dump(le_gender, os.path.join(transformers_path, 'gender_encoder.pkl'))
+            print(f"LabelEncoder для 'Пол' сохранен в {transformers_path}")
+            joblib.dump(gender_mapping, os.path.join(transformers_path, 'gender_mapping.pkl'))
+            print(f"Маппинг для 'Пол' сохранен в {transformers_path}")
     
     # Точка продаж: one-hot encoding для часто встречающихся значений
     if 'Точка продаж' in df_clean.columns:
@@ -249,15 +273,29 @@ def encode_categorical_features(df):
         N = 10  # Можно настроить в зависимости от распределения
         top_locations = df_clean['Точка продаж'].value_counts().nlargest(N).index
         
-        # Создаем новый признак для определения, относится ли точка к топ-N
-        df_clean['top_location'] = df_clean['Точка продаж'].apply(lambda x: x if x in top_locations else 'Другое')
+        # Создаем OneHotEncoder только для этих топ-N категорий
+        # Все остальные будут объединены в категорию 'Other' неявно, если handle_unknown='ignore'
+        # или вызовут ошибку, если handle_unknown='error'. 
+        # Для UI лучше сделать явную категорию 'Other' или обрабатывать неизвестные значения.
+        # Пока используем get_dummies для простоты, но для UI это нужно будет переделать с сохраненным OHE.
         
-        # Применяем one-hot encoding
-        ohe = pd.get_dummies(df_clean['top_location'], prefix='location')
-        df_clean = pd.concat([df_clean, ohe], axis=1)
+        # Сохраняем список top_locations, чтобы использовать его при обработке новых данных в UI
+        if transformers_path:
+            joblib.dump(top_locations.tolist(), os.path.join(transformers_path, 'top_locations_list.pkl'))
+            print(f"Список топ-{N} локаций сохранен в {transformers_path}")
+
+        for location in top_locations:
+            df_clean[f'location_{location.replace(" ", "_").replace(",", "").replace(".", "").replace("/", "_")}'] = \
+                (df_clean['Точка продаж'] == location).astype(int)
         
-        print(f"Созданы one-hot encoding признаки для {N} наиболее частых точек продаж")
-    
+        # Добавляем колонку 'location_Other' для значений, не вошедших в топ-N
+        df_clean['location_Other'] = (~df_clean['Точка продаж'].isin(top_locations)).astype(int)
+        
+        print(f"Созданы One-Hot encoded признаки для топ-{N} локаций и категория 'Other'")
+        # Примечание: для полноценной работы с UI здесь следовало бы использовать обученный OneHotEncoder
+        # и сохранять его. Текущая реализация с get_dummies и ручным созданием колонок 
+        # упрощена для демонстрации сохранения списка top_locations.
+
     # Название товара: создаем агрегированные категории и one-hot encoding
     if 'Название товара' in df_clean.columns:
         # Предполагаем, что мы можем определить основные категории товаров
@@ -565,31 +603,23 @@ def main():
     """
     Основная функция для запуска предобработки данных
     """
-    parser = argparse.ArgumentParser(description='Предобработка данных для моделирования')
-    parser.add_argument('--input', type=str, required=True, help='Путь к исходному CSV-файлу')
-    parser.add_argument('--output', type=str, default='../output', help='Директория для сохранения результатов')
+    parser = argparse.ArgumentParser(description='Предобработка данных для анализа лояльности клиентов')
+    parser.add_argument('--input_file', type=str, default='../../dataset/Concept202408.csv', 
+                        help='Путь к исходному CSV-файлу')
+    parser.add_argument('--output_dir', type=str, default='../../output', 
+                        help='Директория для сохранения результатов и трансформеров')
     args = parser.parse_args()
     
-    # Проверка существования файла
-    if not os.path.exists(args.input):
-        print(f"Ошибка: Файл {args.input} не найден")
-        return
-    
-    # Создание выходной директории, если она не существует
-    if not os.path.exists(args.output):
-        os.makedirs(args.output)
-    
     # Загрузка данных
-    print(f"Загрузка данных из {args.input}...")
-    df = pd.read_csv(args.input)
+    raw_df = pd.read_csv(args.input_file)
     
-    # Предобработка данных
-    preprocessed_df = preprocess_data(df, args.output)
+    # Предобработка данных с сохранением трансформеров
+    preprocessed_df = preprocess_data(raw_df, args.output_dir)
     
     if preprocessed_df is not None:
         print("Предобработка данных завершена успешно.")
     else:
-        print("Ошибка при предобработке данных.")
+        print("Ошибка в процессе предобработки данных.")
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main() 

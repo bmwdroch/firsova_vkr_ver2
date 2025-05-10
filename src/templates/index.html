@@ -1,0 +1,196 @@
+{% extends "base.html" %}
+
+{% block title %}{{ page_title }} - Главная{% endblock %}
+
+{% block content %}
+<h2>{{ page_title }}</h2>
+
+<div class="info-box" id="model-info-container" hx-get="/ui/model-info" hx-trigger="load, every 1m" hx-swap="innerHTML">
+    <!-- Информация о модели будет загружена сюда -->
+    <p>Загрузка информации о модели...</p>
+</div>
+
+<div class="info-box" id="loyalty-distribution-container" hx-get="/ui/loyalty-distribution" hx-trigger="load, every 1m" hx-swap="innerHTML">
+    <!-- Диаграмма распределения лояльности будет загружена сюда -->
+    <p>Загрузка распределения клиентов...</p>
+    <canvas id="loyaltyChart" width="400" height="200"></canvas>
+</div>
+
+<div class="form-section">
+    <h3>Протестировать модель классификации</h3>
+    <p>Вы можете загрузить CSV-файл с данными клиентов или ввести данные для одного клиента вручную.</p>
+    
+    <h4>Загрузка CSV-файла:</h4>
+    <p>
+        CSV-файл должен быть в кодировке UTF-8. <br>
+        В идеале, файл должен содержать все 18 признаков, на которых обучалась модель. <br>
+        Список ожидаемых признаков: 
+        <code>recency_ratio, purchase_amount_cv, purchase_stability, recency, pca_component_3, monetary, Cумма покупки_std, pca_component_2, avg_purchase, pca_component_1, cluster, bonus_earning_ratio, Начислено бонусов_sum, bonus_activity, Начислено бонусов_mean, frequency, purchase_frequency, purchase_density</code>.<br>
+        Также желательно наличие колонки <code>Клиент</code> или <code>client_id</code> для идентификации в результатах.<br>
+        Если какие-либо из 18 ключевых признаков отсутствуют в файле или содержат нечисловые значения, они будут заменены средними значениями-заглушками, что может повлиять на точность предсказания.
+    </p>
+
+    <form id="classify-form-csv" hx-post="/ui/classify" hx-target="#classification-output" hx-swap="innerHTML" hx-encoding="multipart/form-data">
+        <div>
+            <label for="file">Выбрать CSV-файл:</label>
+            <input type="file" id="file" name="file" accept=".csv" required>
+        </div>
+        <button type="submit">Классифицировать по CSV</button>
+    </form>
+    <hr>
+    <h4>Ручной ввод данных для одного клиента:</h4>
+    <p>
+        Введите известные вам метрики. На основе этих данных система попытается рассчитать некоторые производные признаки.<br>
+        Признаки, которые невозможно рассчитать из введенных данных (например, PCA компоненты, номер кластера, некоторые сложные производные), будут заменены средними значениями-заглушками. <br>
+        <strong>Это может привести к менее точным результатам по сравнению с загрузкой полного набора из 18 признаков через CSV.</strong>
+    </p>
+    <form id="classify-form-manual" hx-post="/ui/classify" hx-target="#classification-output" hx-swap="innerHTML">
+        <div class="form-grid">
+            <div>
+                <label for="manual_recency">Давность последней покупки (дни):</label>
+                <input type="number" step="any" id="manual_recency" name="manual_recency">
+            </div>
+            <div>
+                <label for="manual_frequency">Количество покупок (за период):</label>
+                <input type="number" step="any" id="manual_frequency" name="manual_frequency">
+            </div>
+            <div>
+                <label for="manual_monetary">Общая сумма покупок (за период):</label>
+                <input type="number" step="any" id="manual_monetary" name="manual_monetary">
+            </div>
+            <div>
+                <label for="manual_avg_purchase">Средний чек:</label>
+                <input type="number" step="any" id="manual_avg_purchase" name="manual_avg_purchase">
+            </div>
+            <div>
+                <label for="manual_bonus_sum_earned">Начислено бонусов (сумма):</label>
+                <input type="number" step="any" id="manual_bonus_sum_earned" name="manual_bonus_sum_earned">
+            </div>
+            <div>
+                <label for="manual_activity_period_days">Период активности клиента (дни):</label>
+                <input type="number" step="any" id="manual_activity_period_days" name="manual_activity_period_days" title="Используется для расчета recency_ratio = recency / activity_period_days">
+            </div>
+            <div>
+                <label for="manual_purchase_std_dev">Станд. отклонение суммы покупки:</label>
+                <input type="number" step="any" id="manual_purchase_std_dev" name="manual_purchase_std_dev" title="Используется для расчета purchase_amount_cv = purchase_std_dev / avg_purchase">
+            </div>
+        </div>
+        <button type="submit">Классифицировать вручную</button>
+    </form>
+</div>
+
+<div class="info-box" id="classification-output" style="margin-top: 20px;">
+    <h4>Результаты обработки:</h4>
+    <p>Загрузите файл или введите данные и нажмите соответствующую кнопку, чтобы увидеть результат.</p>
+</div>
+
+<div class="info-box" id="classification-results-container-demo" hx-get="/ui/classification-results" hx-trigger="load" hx-swap="innerHTML">
+    <!-- Пример результатов классификации (демо-данные) будет загружен сюда -->
+    <p>Загрузка примера результатов...</p>
+</div>
+
+{% endblock %}
+
+{% block scripts_extra %}
+<script src="https://unpkg.com/htmx.org@1.9.10" integrity="sha384-D1Kt99CQMDuVetoL1lrYwg5t+9QdHe7NLX/SoJYkXDFfX37iInKRy5xLSi8nO7UC" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    document.addEventListener('htmx:afterSwap', function(event) {
+        // Обработка обновления диаграммы распределения лояльности
+        if (event.detail.target.id === 'loyalty-distribution-container') {
+            const chartDataElement = event.detail.target.querySelector('script[type="application/json"]');
+            if (chartDataElement) {
+                try {
+                    const data = JSON.parse(chartDataElement.textContent);
+                    if (data && data.labels && data.labels.length > 0) {
+                        renderLoyaltyChart(data);
+                    } else {
+                        console.log("Данные для диаграммы неполные или отсутствуют.");
+                        // Можно скрыть canvas или показать сообщение
+                         const canvas = document.getElementById('loyaltyChart');
+                         if(canvas) canvas.style.display = 'none';
+                    }
+                } catch (e) {
+                    console.error("Ошибка парсинга данных для диаграммы:", e);
+                }
+            } else {
+                 console.log("Элемент с данными для диаграммы не найден после htmx:afterSwap.");
+                 const canvas = document.getElementById('loyaltyChart');
+                 if(canvas) canvas.style.display = 'none'; // Скрываем, если нет данных
+            }
+        }
+
+        // Если обновился контейнер с результатами классификации, можно что-то сделать
+        // if (event.detail.target.id === 'classification-output') {
+        //     console.log("Результаты классификации обновлены.");
+        // }
+    });
+
+    function renderLoyaltyChart(data) {
+        const canvas = document.getElementById('loyaltyChart');
+        if (!canvas) return;
+        canvas.style.display = 'block'; // Показываем canvas, если он был скрыт
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+
+        if (window.myLoyaltyChart instanceof Chart) {
+            window.myLoyaltyChart.destroy();
+        }
+        window.myLoyaltyChart = new Chart(ctx, {
+            type: 'pie',
+            data: {
+                labels: data.labels,
+                datasets: [{
+                    label: 'Распределение клиентов',
+                    data: data.values,
+                    backgroundColor: [
+                        'rgba(255, 99, 132, 0.7)', 'rgba(54, 162, 235, 0.7)',
+                        'rgba(255, 206, 86, 0.7)', 'rgba(75, 192, 192, 0.7)',
+                        'rgba(153, 102, 255, 0.7)', 'rgba(255, 159, 64, 0.7)'
+                    ],
+                    borderColor: [
+                        'rgba(255, 99, 132, 1)', 'rgba(54, 162, 235, 1)',
+                        'rgba(255, 206, 86, 1)', 'rgba(75, 192, 192, 1)',
+                        'rgba(153, 102, 255, 1)', 'rgba(255, 159, 64, 1)'
+                    ],
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'top' },
+                    title: { display: true, text: 'Распределение клиентов по сегментам лояльности' }
+                }
+            }
+        });
+    }
+
+    // Попытка инициализировать диаграмму при первой загрузке страницы,
+    // если блок #loyalty-distribution-container уже содержит данные (например, из-за кэша htmx или начальной загрузки)
+    document.addEventListener('DOMContentLoaded', () => {
+        const loyaltyContainer = document.getElementById('loyalty-distribution-container');
+        if(loyaltyContainer){
+            const chartDataElement = loyaltyContainer.querySelector('script[type="application/json"]');
+            if (chartDataElement) {
+                 try {
+                    const data = JSON.parse(chartDataElement.textContent);
+                    if (data && data.labels && data.labels.length > 0) {
+                        renderLoyaltyChart(data);
+                    } else {
+                         const canvas = document.getElementById('loyaltyChart');
+                         if(canvas) canvas.style.display = 'none';
+                    }
+                } catch (e) {
+                    //
+                }
+            } else {
+                 const canvas = document.getElementById('loyaltyChart');
+                 if(canvas) canvas.style.display = 'none';
+            }
+        }
+    });
+
+</script>
+{% endblock %} 

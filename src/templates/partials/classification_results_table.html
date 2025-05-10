@@ -1,0 +1,38 @@
+{# src/templates/partials/classification_results_table.html #}
+{% if results %}
+    <table class="results-table">
+        <thead>
+            <tr>
+                <th>Client ID</th>
+                <th>Сегмент лояльности</th>
+                <th>Оценка (Score)</th>
+                {# Дополнительные колонки, если они есть в results #}
+                {% if results and results[0] %}
+                    {% for key in results[0].keys() %}
+                        {% if key not in ['client_id', 'segment', 'score'] %}
+                            <th>{{ key | title }}</th>
+                        {% endif %}
+                    {% endfor %}
+                {% endif %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in results %}
+                <tr>
+                    <td>{{ row.client_id | default('N/A') }}</td>
+                    <td>{{ row.segment | default('N/A') }}</td>
+                    <td>{{ row.score | default('N/A') }}</td>
+                    {% if results and results[0] %}
+                        {% for key, value in row.items() %}
+                            {% if key not in ['client_id', 'segment', 'score'] %}
+                                <td>{{ value }}</td>
+                            {% endif %}
+                        {% endfor %}
+                    {% endif %}
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+{% else %}
+    <p>Результаты классификации не загружены или отсутствуют.</p>
+{% endif %} 

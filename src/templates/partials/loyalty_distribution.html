@@ -1,0 +1,25 @@
+{# src/templates/partials/loyalty_distribution.html #}
+{% if distribution and distribution.labels and distribution.values and distribution.labels | length > 0 %}
+    <h4>Распределение клиентов по сегментам:</h4>
+    
+    <!-- Данные для графика передаются в виде JSON внутри тега script -->
+    <script type="application/json" id="loyaltyDistributionData">
+        {{ distribution | tojson | safe }}
+    </script>
+
+    <p style="text-align: center; margin-top: 5px;">График распределения отображается в начале страницы.</p>
+    <details>
+        <summary>Показать текстовые данные распределения</summary>
+        <ul>
+        {% for i in range(distribution.labels | length) %}
+            <li>{{ distribution.labels[i] }}: {{ distribution.values[i] }} клиентов</li>
+        {% endfor %}
+        </ul>
+    </details>
+{% else %}
+    <p>Данные о распределении лояльности не загружены или отсутствуют.</p>
+    <!-- Убедимся, что скрипт не пытается строить пустой график -->
+    <script type="application/json" id="loyaltyDistributionData">
+        null
+    </script>
+{% endif %} 

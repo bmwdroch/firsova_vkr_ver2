@@ -25,7 +25,11 @@ from preprocessing.enhanced_loyalty_features import (
     create_enhanced_features,
     perform_customer_clustering,
     calculate_enhanced_loyalty_score,
-    prepare_final_loyalty_dataset
+    prepare_final_loyalty_dataset,
+    # Добавляем main_enhanced_demo для возможного вызова или если там есть полезные функции
+    # которые могут быть интегрированы или использованы для проверки.
+    # Если main_enhanced_demo не нужен для пайплайна, его можно будет убрать.
+    # main_enhanced_demo 
 )
 from modeling.model_training import ModelTrainer
 from modeling.model_evaluation import ModelEvaluator
@@ -113,6 +117,9 @@ def preprocess_data_step(input_file, output_dir, save_intermediate=False):
     
     # Подготовка базового датасета с RFM
     print("Создание базового RFM-анализа...")
+    # Функция prepare_final_dataset также может потребовать output_dir для сохранения своих артефактов,
+    # если мы решим, что это необходимо в будущем (например, RFM-квантили или что-то подобное).
+    # Пока оставляем как есть, так как она не сохраняет трансформеры.
     base_df = prepare_final_dataset(preprocessed_df)
     
     # Сохранение промежуточных результатов
@@ -146,21 +153,32 @@ def create_loyalty_features_step(base_df, output_dir, save_intermediate=False):
     print("Создание расширенных признаков лояльности...")
     enhanced_df = create_enhanced_features(base_df)
     
+    # Определяем путь для сохранения трансформеров из enhanced_loyalty_features
+    transformers_path_enhanced = os.path.join(output_dir, "models", "transformers")
+    if save_intermediate and not os.path.exists(transformers_path_enhanced):
+        os.makedirs(transformers_path_enhanced, exist_ok=True)
+        print(f"Создана директория для трансформеров KMeans/PCA: {transformers_path_enhanced}")
+    elif not save_intermediate:
+        transformers_path_enhanced = None # Не сохраняем, если нет флага
+
     # Выполнение кластеризации клиентов
     print("Выполнение кластеризации клиентов...")
-    clustered_df = perform_customer_clustering(enhanced_df)
+    clustered_df = perform_customer_clustering(enhanced_df, transformers_path=transformers_path_enhanced)
     
     # Расчет улучшенного показателя лояльности
     print("Расчет улучшенного показателя лояльности...")
-    loyalty_df = calculate_enhanced_loyalty_score(clustered_df)
+    # Передаем output_dir для возможной визуализации PCA и transformers_path для сохранения моделей PCA
+    loyalty_df = calculate_enhanced_loyalty_score(clustered_df, output_dir=output_dir, transformers_path=transformers_path_enhanced)
     
     # Подготовка финального датасета для моделирования
     print("Подготовка финального датасета для моделирования...")
+    # prepare_final_loyalty_dataset также может использовать output_dir для сохранения результатов отбора признаков и т.д.
     data_dict = prepare_final_loyalty_dataset(
         loyalty_df, 
         balance_method='none',  # Без балансировки на этом этапе
         feature_selection=True,   # Отбор информативных признаков
-        max_features=50
+        max_features=50,
+        output_dir=output_dir # Передаем output_dir для сохранения метаданных и т.д.
     )
     
     # Сохранение промежуточных результатов

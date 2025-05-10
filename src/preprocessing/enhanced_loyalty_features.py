@@ -14,6 +14,7 @@ from sklearn.metrics import silhouette_score
 import matplotlib.pyplot as plt
 import seaborn as sns
 import os
+import joblib # Добавлено для сохранения трансформеров
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.feature_selection import mutual_info_classif, SelectKBest
 from sklearn.inspection import permutation_importance
@@ -127,7 +128,7 @@ def create_enhanced_features(df):
         traceback.print_exc()
         return df
 
-def perform_customer_clustering(df, n_clusters=5, random_state=42):
+def perform_customer_clustering(df, n_clusters=5, random_state=42, transformers_path=None):
     """
     Выполняет кластеризацию клиентов на основе признаков лояльности
     
@@ -135,6 +136,7 @@ def perform_customer_clustering(df, n_clusters=5, random_state=42):
         df (pandas.DataFrame): Датасет с признаками лояльности
         n_clusters (int): Количество кластеров
         random_state (int): Seed для воспроизводимости результатов
+        transformers_path (str, optional): Путь для сохранения трансформеров (StandardScaler, KMeans)
         
     Возвращает:
         pandas.DataFrame: Датасет с добавленными метками кластеров
@@ -149,13 +151,16 @@ def perform_customer_clustering(df, n_clusters=5, random_state=42):
     
     # Исключаем ID и целевые переменные
     exclude_cols = ['Клиент', 'RFM_Score', 'RFM_Group', 'loyalty_segment', 'R', 'F', 'M']
-    feature_cols = [col for col in numeric_cols if col not in exclude_cols]
+    # Дополнительно исключаем признаки, которые могут быть результатом предыдущих шагов PCA или кластеризации, если пайплайн запускается повторно
+    exclude_cols.extend([col for col in cluster_df.columns if 'pca_component_' in col or 'cluster' == col])
+    feature_cols = [col for col in numeric_cols if col not in exclude_cols and col in cluster_df.columns]
     
     # Проверка наличия признаков
     if not feature_cols:
-        print("Ошибка: Не найдены числовые признаки для кластеризации")
+        print("Ошибка: Не найдены числовые признаки для кластеризации после исключений. Список доступных колонок:", cluster_df.columns.tolist())
         return cluster_df
     
+    print(f"Признаки для кластеризации ({len(feature_cols)}): {feature_cols}")
     # Подготовка данных для кластеризации
     X = cluster_df[feature_cols].copy()
     
@@ -163,9 +168,15 @@ def perform_customer_clustering(df, n_clusters=5, random_state=42):
     X.fillna(X.mean(), inplace=True)
     
     # Стандартизация данных
-    scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(X)
-    
+    scaler_kmeans = StandardScaler()
+    X_scaled = scaler_kmeans.fit_transform(X)
+    if transformers_path:
+        joblib.dump(scaler_kmeans, os.path.join(transformers_path, 'kmeans_scaler.pkl'))
+        print(f"StandardScaler для KMeans сохранен в {transformers_path}")
+        # Сохраняем список признаков, использованных для KMeans
+        joblib.dump(feature_cols, os.path.join(transformers_path, 'kmeans_feature_cols.pkl'))
+        print(f"Список признаков для KMeans сохранен в {transformers_path}")
+
     # Определение оптимального числа кластеров с помощью метода силуэта
     if n_clusters == 'auto':
         silhouette_scores = []
@@ -183,8 +194,11 @@ def perform_customer_clustering(df, n_clusters=5, random_state=42):
         print(f"Оптимальное число кластеров: {n_clusters}")
     
     # Применение K-means
-    kmeans = KMeans(n_clusters=n_clusters, random_state=random_state, n_init=10)
-    cluster_df['cluster'] = kmeans.fit_predict(X_scaled)
+    kmeans_model = KMeans(n_clusters=n_clusters, random_state=random_state, n_init=10)
+    cluster_df['cluster'] = kmeans_model.fit_predict(X_scaled)
+    if transformers_path:
+        joblib.dump(kmeans_model, os.path.join(transformers_path, 'kmeans_model.pkl'))
+        print(f"KMeans модель сохранена в {transformers_path}")
     
     # Анализ кластеров
     cluster_stats = cluster_df.groupby('cluster').agg({
@@ -509,116 +523,101 @@ def optimize_category_boundaries(df, initial_boundaries, target_distribution=Non
     
     return optimized_boundaries
 
-def calculate_enhanced_loyalty_score(df, pca_components=3, output_dir=None):
+def calculate_enhanced_loyalty_score(df, pca_components=3, output_dir=None, transformers_path=None):
     """
-    Рассчитывает улучшенный показатель лояльности на основе комбинации признаков
+    Расчет улучшенного показателя лояльности с использованием PCA и кластеризации
     
     Аргументы:
-        df (pandas.DataFrame): Датасет с признаками лояльности и кластерами
-        pca_components (int): Количество компонент для PCA
-        output_dir (str): Директория для сохранения результатов
-        
+        df (pandas.DataFrame): Датасет с расширенными признаками лояльности (после create_enhanced_features и perform_customer_clustering)
+        pca_components (int): Количество компонент PCA
+        output_dir (str, optional): Директория для сохранения графиков и отчетов (если нужны)
+        transformers_path (str, optional): Путь для сохранения трансформеров (StandardScaler, PCA)
+
     Возвращает:
-        pandas.DataFrame: Датасет с расчитанным показателем лояльности
+        pandas.DataFrame: Датасет с улучшенным показателем лояльности и компонентами PCA
     """
-    print("Расчет улучшенного показателя лояльности...")
+    print("Расчет улучшенного показателя лояльности с PCA...")
     
     # Копирование датасета
     loyalty_df = df.copy()
-    
-    # 1. Взвешенный RFM-скор (если RFM-метрики доступны)
-    rfm_cols = ['R', 'F', 'M']
-    if all(col in loyalty_df.columns for col in rfm_cols):
-        if 'weighted_RFM' not in loyalty_df.columns:
-            loyalty_df['weighted_RFM'] = loyalty_df['R'] * 0.5 + loyalty_df['F'] * 0.3 + loyalty_df['M'] * 0.2
-    
-    # 2. Интегральный показатель на основе PCA
-    
+
+    # 1. Применение PCA
     # Выбор числовых признаков для PCA
-    numeric_cols = loyalty_df.select_dtypes(include=['int64', 'float64']).columns.tolist()
+    numeric_cols_pca = loyalty_df.select_dtypes(include=['int64', 'float64']).columns.tolist()
     
-    # Исключаем ID, метки кластеров и целевые переменные
-    exclude_cols = [
-        'Клиент', 'cluster', 'RFM_Score', 'RFM_Group', 'loyalty_segment', 
-        'weighted_RFM', 'enhanced_loyalty_score', 'cluster_segment'
-    ]
-    feature_cols = [col for col in numeric_cols if col not in exclude_cols and not col.startswith('Дата')]
-    
-    # Если есть хотя бы 3 числовых признака, применяем PCA
-    if len(feature_cols) >= 3:
-        # Масштабирование данных
-        scaler = StandardScaler()
-        scaled_features = scaler.fit_transform(loyalty_df[feature_cols])
+    # Исключаем ID, целевые переменные, RFM-составляющие, кластеры и сам enhanced_loyalty_score
+    # если он был рассчитан на предыдущем шаге без PCA.
+    exclude_pca_cols = ['Клиент', 'RFM_Score', 'RFM_Group', 'loyalty_segment', 
+                        'R', 'F', 'M', 'cluster', 'cluster_segment', 
+                        'enhanced_loyalty_score', 'base_loyalty_score'] 
+    # Также исключаем уже существующие PCA компоненты, если пайплайн перезапускается
+    exclude_pca_cols.extend([col for col in loyalty_df.columns if 'pca_component_' in col])
+
+    pca_feature_cols = [col for col in numeric_cols_pca if col not in exclude_pca_cols and col in loyalty_df.columns]
+
+    if not pca_feature_cols:
+        print("Ошибка: Не найдены числовые признаки для PCA после исключений. Доступные колонки:", loyalty_df.columns.tolist())
+        loyalty_df[['pca_component_1', 'pca_component_2', 'pca_component_3']] = 0 # Заглушка
+        # return loyalty_df # Ранний выход, если нет признаков для PCA
+    else:
+        print(f"Признаки для PCA ({len(pca_feature_cols)}): {pca_feature_cols}")
+        X_pca_raw = loyalty_df[pca_feature_cols].copy()
+        
+        # Обработка пропущенных значений
+        X_pca_raw.fillna(X_pca_raw.mean(), inplace=True)
+        
+        # Стандартизация данных перед PCA
+        scaler_pca = StandardScaler()
+        X_pca_scaled = scaler_pca.fit_transform(X_pca_raw)
+        if transformers_path:
+            joblib.dump(scaler_pca, os.path.join(transformers_path, 'pca_scaler.pkl'))
+            print(f"StandardScaler для PCA сохранен в {transformers_path}")
+            # Сохраняем список признаков, использованных для PCA
+            joblib.dump(pca_feature_cols, os.path.join(transformers_path, 'pca_feature_cols.pkl'))
+            print(f"Список признаков для PCA сохранен в {transformers_path}")
         
         # Применение PCA
-        pca = PCA(n_components=min(pca_components, len(feature_cols)))
-        pca_result = pca.fit_transform(scaled_features)
+        # Убедимся, что n_components не превышает количество признаков
+        actual_pca_components = min(pca_components, X_pca_scaled.shape[1])
+        if actual_pca_components < pca_components:
+            print(f"Предупреждение: Количество PCA компонент уменьшено до {actual_pca_components} из-за недостатка признаков.")
         
-        # Добавление PCA компонент в датасет
-        for i in range(pca_result.shape[1]):
-            loyalty_df[f'pca_component_{i+1}'] = pca_result[:, i]
-        
-        # Вывод информации о PCA
-        explained_variance = pca.explained_variance_ratio_
-        print(f"PCA выполнен. Объясненная дисперсия по компонентам:")
-        for i, var in enumerate(explained_variance):
-            print(f"Компонента {i+1}: {var:.4f} ({var*100:.2f}%)")
-        print(f"Суммарная объясненная дисперсия: {sum(explained_variance)*100:.2f}%")
-        
-        # Визуализация PCA компонент
-        if output_dir is not None:
-            vis_dir = os.path.join(output_dir, 'visualizations')
-            if not os.path.exists(vis_dir):
-                os.makedirs(vis_dir)
+        if actual_pca_components > 0:
+            pca_model = PCA(n_components=actual_pca_components, random_state=42)
+            X_pca = pca_model.fit_transform(X_pca_scaled)
             
-            # Scatter plot для первых двух компонент PCA
-            plt.figure(figsize=(10, 8))
+            # Сохранение модели PCA
+            if transformers_path:
+                joblib.dump(pca_model, os.path.join(transformers_path, 'pca_model.pkl'))
+                print(f"PCA модель сохранена в {transformers_path}")
             
-            # Если есть кластеры, используем их для цвета
-            if 'cluster' in loyalty_df.columns:
-                scatter = plt.scatter(
-                    loyalty_df['pca_component_1'], 
-                    loyalty_df['pca_component_2'],
-                    c=loyalty_df['cluster'], 
-                    cmap='viridis', 
-                    alpha=0.6,
-                    s=50
-                )
-                plt.colorbar(scatter, label='Кластер')
-            else:
-                plt.scatter(
-                    loyalty_df['pca_component_1'], 
-                    loyalty_df['pca_component_2'],
-                    alpha=0.6,
-                    s=50
-                )
+            # Добавление PCA компонент в датасет
+            for i in range(X_pca.shape[1]):
+                loyalty_df[f'pca_component_{i+1}'] = X_pca[:, i]
             
-            plt.title('PCA: первые две главные компоненты')
-            plt.xlabel(f'PCA 1 ({explained_variance[0]*100:.2f}%)')
-            plt.ylabel(f'PCA 2 ({explained_variance[1]*100:.2f}%)')
-            plt.grid(True, alpha=0.3)
-            plt.savefig(os.path.join(vis_dir, 'pca_components.png'))
-            plt.close()
-    
-    # 3. Создание комбинированного показателя лояльности
-    
-    # Если есть взвешенный RFM-скор, используем его как базу
+            # Если компонент получилось меньше, чем pca_components (3 по умолчанию), добавляем недостающие как нули
+            for i in range(X_pca.shape[1] + 1, pca_components + 1):
+                 loyalty_df[f'pca_component_{i}'] = 0
+                 print(f"Добавлена pca_component_{i} как 0 из-за недостатка компонент после PCA.")
+
+            print(f"Добавлено {X_pca.shape[1]} PCA компонент(ы).")
+            # print(f"Объясненная дисперсия по компонентам: {pca_model.explained_variance_ratio_}")
+            # print(f"Суммарная объясненная дисперсия: {np.sum(pca_model.explained_variance_ratio_)}")
+
+            # Визуализация важности признаков для PCA компонент (если нужно)
+            # if output_dir and actual_pca_components > 0:
+            #     plot_pca_feature_importance(pca_model, pca_feature_cols, output_dir, top_n=10)
+        else:
+            print("Предупреждение: PCA не был применен, так как количество доступных признаков или компонент равно 0.")
+            for i in range(1, pca_components + 1):
+                loyalty_df[f'pca_component_{i}'] = 0 # Заглушка, если PCA не выполнен
+
+    # 2. Расчет базовой метрики лояльности (комбинация RFM и других факторов)
+    # Веса можно настраивать
     if 'weighted_RFM' in loyalty_df.columns:
-        # Нормализация RFM-скора к диапазону [0, 1]
-        max_rfm = 12  # Максимальное значение RFM-скора (4+4+4)
-        loyalty_df['rfm_normalized'] = loyalty_df['weighted_RFM'] / max_rfm
-        
-        # Базовая составляющая лояльности
-        loyalty_base = loyalty_df['rfm_normalized']
+        loyalty_base = loyalty_df['weighted_RFM']
     else:
-        # Если RFM недоступен, используем первую компоненту PCA
-        # Нормализация к диапазону [0, 1]
-        pca1_min = loyalty_df['pca_component_1'].min()
-        pca1_max = loyalty_df['pca_component_1'].max()
-        loyalty_df['pca1_normalized'] = (loyalty_df['pca_component_1'] - pca1_min) / (pca1_max - pca1_min)
-        
-        # Базовая составляющая лояльности
-        loyalty_base = loyalty_df['pca1_normalized']
+        loyalty_base = loyalty_df['pca_component_1']
     
     # Если доступны дополнительные признаки, учитываем их
     loyalty_bonus = 0
@@ -1009,15 +1008,42 @@ def evaluate_feature_importance(X_features, y_target, methods=None, n_estimators
             explainer = shap.TreeExplainer(rf)
             
             # Вычисляем SHAP values для тестовой выборки
-            shap_values = explainer.shap_values(X_test)
+            shap_values_output = explainer.shap_values(X_test) # Переименовал во избежание путаницы
             
             # Вычисляем средние абсолютные SHAP values для каждого признака
-            if isinstance(shap_values, list):  # Для мультиклассовой задачи
-                # Для многоклассовой задачи берем средние значения по всем классам
-                mean_abs_shap = np.mean([np.abs(sv).mean(axis=0) for sv in shap_values], axis=0)
+            # Для бинарной классификации shap_values_output часто является списком из двух массивов [shap_class_0, shap_class_1]
+            # или одним массивом (n_samples, n_features) если используется model_output='raw' и модель однозначна
+            # или (n_samples, n_features, n_classes) для некоторых конфигураций
+
+            if isinstance(shap_values_output, list):
+                # Если список, предполагаем [shap_for_class_0, shap_for_class_1, ...]
+                # Для бинарной классификации берем SHAP values для класса 1
+                if len(shap_values_output) == 2: # Типично для бинарной
+                    shap_values_for_importance = shap_values_output[1]
+                else: # Мультикласс - усредняем абсолютные значения
+                    # Это создаст (n_features,) массив из средних абсолютных SHAP values по всем классам
+                    shap_values_for_importance = np.mean([np.abs(sv) for sv in shap_values_output], axis=0).mean(axis=0)
+            elif isinstance(shap_values_output, np.ndarray) and shap_values_output.ndim == 3:
+                # Если массив (n_samples, n_features, n_classes), берем для класса 1
+                # Это предполагает, что класс 1 - это второй класс (индекс 1)
+                shap_values_for_importance = shap_values_output[:, :, 1] # (n_samples, n_features)
+            elif isinstance(shap_values_output, np.ndarray) and shap_values_output.ndim == 2:
+                # Если массив (n_samples, n_features) - это уже SHAP values для одного исхода (или сырые)
+                shap_values_for_importance = shap_values_output
             else:
-                mean_abs_shap = np.abs(shap_values).mean(axis=0)
+                raise ValueError(f"Неожиданный формат SHAP values: {type(shap_values_output)}")
+
+            # Теперь shap_values_for_importance должен быть (n_samples, n_features)
+            # Вычисляем средние абсолютные значения по сэмплам для каждого признака
+            mean_abs_shap = np.abs(shap_values_for_importance).mean(axis=0) # Должен быть (n_features,)
+
+            print(f"DEBUG SHAP: type of explainer.shap_values(X_test): {type(shap_values_output)}")
+            if isinstance(shap_values_output, list):
+                print(f"DEBUG SHAP: length of list: {len(shap_values_output)}, shape of first element: {shap_values_output[0].shape if len(shap_values_output) > 0 else 'N/A'}")
+            elif isinstance(shap_values_output, np.ndarray):
+                print(f"DEBUG SHAP: shape of ndarray: {shap_values_output.shape}")
             
+            print(f"DEBUG SHAP: shape of shap_values_for_importance: {shap_values_for_importance.shape if isinstance(shap_values_for_importance, np.ndarray) else type(shap_values_for_importance)}")
             print(f"DEBUG SHAP: shape of mean_abs_shap: {mean_abs_shap.shape if isinstance(mean_abs_shap, np.ndarray) else type(mean_abs_shap)}")
             print(f"DEBUG SHAP: length of features list: {len(features)}")
 
@@ -1054,7 +1080,10 @@ def evaluate_feature_importance(X_features, y_target, methods=None, n_estimators
                     os.makedirs(vis_dir)
                 
                 plt.figure(figsize=(10, 8))
-                shap.summary_plot(shap_values, X_test, plot_type="bar", show=False)
+                # shap.summary_plot теперь должен работать с shap_values_for_importance, если он (n_samples, n_features)
+                # или с оригинальным shap_values_output если он [shap_class0, shap_class1]
+                # Для summary_plot лучше передавать полный вывод explainer.shap_values(X_test)
+                shap.summary_plot(shap_values_output, X_test, plot_type="bar", show=False)
                 plt.tight_layout()
                 plt.savefig(os.path.join(vis_dir, 'shap_summary.png'))
                 plt.close()
@@ -1065,14 +1094,21 @@ def evaluate_feature_importance(X_features, y_target, methods=None, n_estimators
                     plt.figure(figsize=(8, 6))
                     
                     # Для многоклассовой задачи показываем зависимости для первого класса
-                    if isinstance(shap_values, list):
-                        shap.dependence_plot(feature, shap_values[0], X_test, show=False)
+                    # или для класса 1 в бинарном случае, если shap_values_output - список
+                    if isinstance(shap_values_output, list) and len(shap_values_output) > 0:
+                        shap.dependence_plot(feature, shap_values_output[1 if len(shap_values_output) == 2 else 0], X_test, show=False)
+                    elif isinstance(shap_values_output, np.ndarray) and shap_values_output.ndim == 3:
+                        shap.dependence_plot(feature, shap_values_output[:,:,1], X_test, show=False)
+                    elif isinstance(shap_values_output, np.ndarray) and shap_values_output.ndim == 2:
+                        shap.dependence_plot(feature, shap_values_output, X_test, show=False) # Если это уже нужный класс
                     else:
-                        shap.dependence_plot(feature, shap_values, X_test, show=False)
-                    
+                        # Невозможно построить график, если формат неизвестен
+                        print(f"Не удалось построить SHAP dependence plot для {feature} из-за формата shap_values_output")
+                        plt.close() # Закрываем пустую фигуру
+                        continue # Переходим к следующему признаку
+
                     plt.tight_layout()
                     plt.savefig(os.path.join(vis_dir, f'shap_dependence_{feature}.png'))
-                    plt.close()
                     
         except Exception as e:
             print(f"Ошибка при вычислении SHAP Values: {e}")
@@ -1253,15 +1289,47 @@ def prepare_final_loyalty_dataset(df, balance_categories=True, balance_method='b
     # Создание новой целевой переменной для задачи классификации
     if category_column in final_df.columns:
         # Преобразуем категории в числовые метки, начиная с 0
-        loyalty_map = {
-            'Низколояльные': 0,
-            'Умеренно лояльные': 1,
-            'Лояльные': 2,
-            'Высоколояльные': 3,
-            'Отток': 0  # Объединяем с низколояльными
-        }
+        
+        # Определяем фактические уникальные категории в столбце
+        unique_categories = final_df[category_column].unique()
+        
+        if set(unique_categories) == {'Отток', 'Высоколояльные'}:
+            loyalty_map = {
+                'Отток': 0,
+                'Высоколояльные': 1  # 'Высоколояльные' теперь класс 1
+            }
+            print("Обнаружены две фактические категории: 'Отток' и 'Высоколояльные'. Маппинг: Отток -> 0, Высоколояльные -> 1")
+        elif len(unique_categories) <= 2: # Если категорий 2 или меньше, но они другие
+            # Попытка создать универсальный маппинг для двух категорий
+            # Сортируем, чтобы маппинг был детерминированным (например, лексикографически)
+            sorted_unique_categories = sorted(list(unique_categories))
+            loyalty_map = {category: i for i, category in enumerate(sorted_unique_categories)}
+            print(f"Обнаружено {len(unique_categories)} фактических категорий. Автоматический маппинг: {loyalty_map}")
+        else: # Исходный маппинг для 5 категорий, если они все присутствуют
+            loyalty_map = {
+                'Отток': 0,             # Класс 0
+                'Низколояльные': 0,     # Класс 0 (объединен)
+                'Умеренно лояльные': 1, # Класс 1 
+                'Лояльные': 2,          # Класс 2
+                'Высоколояльные': 3     # Класс 3 - Это нужно будет исправить, если классов всего два!
+                                        # Если мы ожидаем бинарную классификацию (0,1) для XGBoost,
+                                        # то такая схема не подойдет, если категорий больше двух.
+                                        # Однако, если xgboost будет настроен на мультиклассовую, то ок.
+                                        # НО! Ошибка XGBoost явно говорит про [0 1] vs [0 3].
+            }
+            print(f"Используется стандартный многоклассовый маппинг (Отток/Низко->0, Умеренно->1, Лояльные->2, Высоко->3): {loyalty_map}")
+            print("ПРЕДУПРЕЖДЕНИЕ: Стандартный маппинг может привести к проблемам с XGBoost, если ожидается бинарная классификация (0/1) и фактических категорий больше двух, но не все 5.")
+
+
         final_df['loyalty_target'] = final_df[category_column].map(loyalty_map)
         
+        # Проверка на NaN после маппинга (если какая-то категория не была в loyalty_map)
+        if final_df['loyalty_target'].isnull().any():
+            print(f"ПРЕДУПРЕЖДЕНИЕ: Обнаружены NaN в 'loyalty_target' после маппинга. Уникальные категории в '{category_column}': {final_df[category_column].unique()}. Используемый loyalty_map: {loyalty_map}")
+            # Можно добавить обработку NaN, например, заполнение модой или удаление строк
+            # final_df.dropna(subset=['loyalty_target'], inplace=True)
+
+
         # Выводим распределение целевой переменной
         print("Распределение целевой переменной:")
         target_counts = final_df['loyalty_target'].value_counts().sort_index()

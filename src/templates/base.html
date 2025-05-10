@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Демонстрация МЛ Модели{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='/css/styles.css') }}">
+    {% block head_extra %}{% endblock %}
+</head>
+<body>
+    <header>
+        <h1>Анализ и классификация лояльности клиентов</h1>
+    </header>
+    <nav>
+        <a href="/ui/">Главная</a>
+        <!-- Можно добавить другие ссылки, если появятся другие страницы -->
+        <!-- <a href="/admin/">Панель администратора</a> (если будет) -->
+    </nav>
+    <div class="container main-content">
+        {% block content %}
+        <p>Содержимое страницы будет здесь.</p>
+        {% endblock %}
+    </div>
+    <footer>
+        <p>&copy; 2025 ВКР Фирсова В.С.</p>
+    </footer>
+    {% block scripts_extra %}{% endblock %}
+</body>
+</html> 

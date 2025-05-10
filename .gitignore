@@ -5,3 +5,4 @@ dataset/Concept202408.csv
 *.tmp
 *.temp 
 *.pyc
+__pycache__/

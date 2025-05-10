@@ -16,3 +16,6 @@ notebook>=6.4.0
 pytest>=6.2.5
 optuna>=3.0.0
 plotly>=5.0.0 
+fastapi>=0.105.0
+uvicorn>=0.25.0
+python-multipart>=0.0.20

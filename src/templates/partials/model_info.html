@@ -1,0 +1,10 @@
+{# src/templates/partials/model_info.html #}
+{% if model %}
+    <h4>Информация о текущей модели:</h4>
+    <p><strong>Имя:</strong> {{ model.name }}</p>
+    <p><strong>Версия:</strong> {{ model.version }}</p>
+    <p><strong>F1-macro (валидация):</strong> {{ model.f1_macro }}</p>
+    <p><strong>Дата обучения:</strong> {{ model.trained_date }}</p>
+{% else %}
+    <p>Информация о модели не загружена.</p>
+{% endif %} 

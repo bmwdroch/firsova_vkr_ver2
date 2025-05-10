@@ -1,0 +1,46 @@
+{
+    "feature_count": 20,
+    "feature_list": [
+        "recency_ratio",
+        "monetary",
+        "pca_component_3",
+        "recency",
+        "pca_component_1",
+        "cluster",
+        "frequency",
+        "purchase_density",
+        "purchase_frequency",
+        "bonus_activity",
+        "purchase_amount_cv",
+        "\u041d\u0430\u0447\u0438\u0441\u043b\u0435\u043d\u043e \u0431\u043e\u043d\u0443\u0441\u043e\u0432_sum",
+        "avg_purchase",
+        "C\u0443\u043c\u043c\u0430 \u043f\u043e\u043a\u0443\u043f\u043a\u0438_std",
+        "purchase_stability",
+        "pca_component_2",
+        "bonus_earning_ratio",
+        "\u041d\u0430\u0447\u0438\u0441\u043b\u0435\u043d\u043e \u0431\u043e\u043d\u0443\u0441\u043e\u0432_mean",
+        "product_\u0414\u0440\u0443\u0433\u043e\u0435_mean",
+        "product_\u0411\u0440\u044e\u043a\u0438_mean"
+    ],
+    "target_column": "loyalty_target",
+    "train_size": 73188,
+    "test_size": 18297,
+    "class_distribution": {
+        "1": 79930,
+        "0": 11555
+    },
+    "train_distribution": {
+        "1": 63944,
+        "0": 9244
+    },
+    "test_distribution": {
+        "1": 15986,
+        "0": 2311
+    },
+    "balance_method": "none",
+    "feature_selection": true,
+    "min_importance": 0.05,
+    "max_features": 50,
+    "train_test_split_ratio": 0.2,
+    "random_state": 42
+}
