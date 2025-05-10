@@ -6,3 +6,8 @@ dataset/Concept202408.csv
 *.temp 
 *.pyc
 __pycache__/
+
+# Игнорирование файлов IDE
+.idea/
+.cursorrules
+.cursor/

@@ -47,6 +47,42 @@
     <form id="classify-form-manual" hx-post="/ui/classify" hx-target="#classification-output" hx-swap="innerHTML">
         <div class="form-grid">
             <div>
+                <label for="manual_client_id">ID Клиента:</label>
+                <input type="text" id="manual_client_id" name="manual_client_id">
+            </div>
+            <div>
+                <label for="manual_gender">Пол (М/Ж/Не указан):</label>
+                <input type="text" id="manual_gender" name="manual_gender">
+            </div>
+            <div>
+                <label for="manual_purchase_date">Дата последней покупки (ГГГГ-ММ-ДД):</label>
+                <input type="text" id="manual_purchase_date" name="manual_purchase_date">
+            </div>
+            <div>
+                <label for="manual_purchase_store">Точка продаж (покупки):</label>
+                <input type="text" id="manual_purchase_store" name="manual_purchase_store">
+            </div>
+            <div>
+                <label for="manual_purchase_amount">Сумма последней покупки:</label>
+                <input type="number" step="any" id="manual_purchase_amount" name="manual_purchase_amount">
+            </div>
+             <div>
+                <label for="manual_quantity">Количество в последней покупке:</label>
+                <input type="number" step="any" id="manual_quantity" name="manual_quantity">
+            </div>
+            <div>
+                <label for="manual_bonus_sum_spent">Списано бонусов (за последнюю покупку):</label>
+                <input type="number" step="any" id="manual_bonus_sum_spent" name="manual_bonus_sum_spent">
+            </div>
+            <div>
+                <label for="manual_card_issue_store">Точка оформления карты:</label>
+                <input type="text" id="manual_card_issue_store" name="manual_card_issue_store">
+            </div>
+            <div>
+                <label for="manual_card_issue_date">Дата оформления карты (ГГГГ-ММ-ДД):</label>
+                <input type="text" id="manual_card_issue_date" name="manual_card_issue_date">
+            </div>
+            <div>
                 <label for="manual_recency">Давность последней покупки (дни):</label>
                 <input type="number" step="any" id="manual_recency" name="manual_recency">
             </div>
@@ -76,6 +112,7 @@
             </div>
         </div>
         <button type="submit">Классифицировать вручную</button>
+        <button type="button" onclick="fillManualTestData()">Заполнить тестовыми данными</button>
     </form>
 </div>
 
@@ -191,6 +228,39 @@
             }
         }
     });
+
+    function fillManualTestData() {
+        const today = new Date();
+        const lastPurchaseDate = new Date(today);
+        lastPurchaseDate.setDate(today.getDate() - 30);
+        const formatDate = (date) => {
+            let month = '' + (date.getMonth() + 1);
+            let day = '' + date.getDate();
+            const year = date.getFullYear();
+            if (month.length < 2) month = '0' + month;
+            if (day.length < 2) day = '0' + day;
+            return [year, month, day].join('-');
+        };
+
+        document.getElementById('manual_client_id').value = 'test_client_001';
+        document.getElementById('manual_gender').value = 'М';
+        document.getElementById('manual_purchase_date').value = formatDate(lastPurchaseDate);
+        document.getElementById('manual_purchase_store').value = 'Москва, ТЦ "Мега"';
+        document.getElementById('manual_purchase_amount').value = '2500';
+        document.getElementById('manual_quantity').value = '2';
+        document.getElementById('manual_bonus_sum_spent').value = '50';
+        document.getElementById('manual_card_issue_store').value = 'Интернет-магазин';
+        document.getElementById('manual_card_issue_date').value = '2023-01-15';
+        
+        // Существующие поля из формы
+        document.getElementById('manual_recency').value = '30';
+        document.getElementById('manual_frequency').value = '3';
+        document.getElementById('manual_monetary').value = '7500';
+        document.getElementById('manual_avg_purchase').value = '2500';
+        document.getElementById('manual_bonus_sum_earned').value = '375'; // Суммарно начислено
+        document.getElementById('manual_activity_period_days').value = '180';
+        document.getElementById('manual_purchase_std_dev').value = '500';
+    }
 
 </script>
 {% endblock %} 
